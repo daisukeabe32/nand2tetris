@@ -10,10 +10,16 @@ class CodeWriter:
     def _emit_lines(self, lines: list[str]) -> None:
         self.out.extend(lines)
     
-    def _new_label(self, prefix: str) -> str:
-        label = f"{prefix}.{self.label_id}"
+    # def _new_label(self, prefix: str) -> str:
+    #     label = f"{prefix}.{self.label_id}"
+    #     self.label_id += 1
+    #     return label
+    
+    def _new_id(self) -> int:
+        uid = self.label_id
         self.label_id += 1
-        return label
+        return uid
+    
     def writeArithmetic(self, command: str) -> None:
         if command == "add":
             self._emit_lines([
@@ -92,8 +98,9 @@ class CodeWriter:
             return
         
         if command == "eq":
-            true_label = self._new_label("EQ_TRUE")
-            end_label = self._new_label("EQ_END")
+            uid = self._new_id()
+            true_label = f"EQ_TRUE.{uid}"
+            end_label = f"EQ_END.{uid}"
             
             self._emit_lines([
                 #pop y --> D
@@ -131,6 +138,7 @@ class CodeWriter:
                 "M=M+1",   
             ])
             return
+        
         raise ValueError(f"Unsupported arithmetic for now: {command}")
     
     def writePushPop(self, command: str, segment: str, index: int) -> None:
