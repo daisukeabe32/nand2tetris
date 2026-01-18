@@ -27,7 +27,7 @@ class CodeWriter:
     def writeArithmetic(self, command: str) -> None:
         if command == "add":
             self._emit_lines([
-                "@SP // ADD Started",
+                "@SP // ADD ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -42,7 +42,7 @@ class CodeWriter:
         
         if command == "sub":
             self._emit_lines([
-                "@SP // SUB Started",
+                "@SP // SUB ",
                 "M=M-1",
                 "A=M",
                 "D=M",  # y
@@ -57,7 +57,7 @@ class CodeWriter:
         
         if command == "neg":
             self._emit_lines([
-                "@SP // NEG Started",
+                "@SP // NEG ",
                 "A=M-1",
                 "M=-M",
             ])
@@ -65,7 +65,7 @@ class CodeWriter:
         
         if command == "and":
             self._emit_lines([
-                "@SP // And Started",
+                "@SP // And ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -80,7 +80,7 @@ class CodeWriter:
 
         if command == "or":
             self._emit_lines([
-                "@SP // OR Started",
+                "@SP // OR ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -95,7 +95,7 @@ class CodeWriter:
 
         if command == "not":
             self._emit_lines([
-                "@SP",
+                "@SP // NOT ",
                 "A=M-1",
                 "M=!M",
             ])
@@ -108,7 +108,7 @@ class CodeWriter:
             
             self._emit_lines([
                 #pop y --> D
-                "@SP // EQ Started",
+                "@SP // EQ ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -150,7 +150,7 @@ class CodeWriter:
             
             self._emit_lines([
                 #pop y --> D
-                "@SP // LT Started",
+                "@SP // LT ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -192,7 +192,7 @@ class CodeWriter:
             
             self._emit_lines([
                 #pop y --> D
-                "@SP // GT Started",
+                "@SP // GT ",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -232,7 +232,7 @@ class CodeWriter:
     def writePushPop(self, command: str, segment: str, index: int) -> None:
         if command == "push" and segment == "constant":
             self._emit_lines([
-                f"@{index} // PUSH CONSTANT Started",
+                f"@{index} // PUSH CONSTANT ",
                 "D=A",
                 "@SP",
                 "A=M",
@@ -241,6 +241,182 @@ class CodeWriter:
                 "M=M+1",
             ])
             return
+        
+        if command == "push" and segment == "local":
+            self._emit_lines([
+                "@LCL // PUSH LOCAL ",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "A=M",
+                "D=M",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "pop" and segment == "local":
+            self._emit_lines([
+                "@LCL // POP LOCAL",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@R13",
+                "A=M",
+                "M=D",
+            ])
+            return
+        
+        if command == "push" and segment == "argument":
+            self._emit_lines([
+                "@ARG // PUSH ARG ",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "A=M",
+                "D=M",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "pop" and segment == "argument":
+            self._emit_lines([
+                "@ARG // POP ARG",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@R13",
+                "A=M",
+                "M=D",
+            ])
+            return
+        
+        if command == "push" and segment == "this":
+            self._emit_lines([
+                "@THIS // PUSH THIS ",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "A=M",
+                "D=M",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "pop" and segment == "this":
+            self._emit_lines([
+                "@THIS // POP THIS",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@R13",
+                "A=M",
+                "M=D",
+            ])
+            return
+        
+        if command == "push" and segment == "that":
+            self._emit_lines([
+                "@THAT // PUSH THAT ",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "A=M",
+                "D=M",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "pop" and segment == "that":
+            self._emit_lines([
+                "@THAT // POP THAT",
+                "D=M",
+                f"@{index}",
+                "D=D+A",
+                "@R13",
+                "M=D",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@R13",
+                "A=M",
+                "M=D",
+            ])
+            return
+        
+        
+        TEMP_BASE = 5
+        if command == "push" and segment == "temp":
+            if not (0 <= index <= 7):
+                raise ValueError(f"temp index out of range: {index}")
+            addr = TEMP_BASE + index
+            self._emit_lines([
+                f"@{addr} // PUSH TEMP {index}(RAM[{addr}]) ",
+                "D=M",
+                "@SP",
+                "A=M",
+                "M=D",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "pop" and segment == "temp":
+            if not (0 <= index <= 7):
+                raise ValueError(f"temp index out of range: {index}")
+            addr = TEMP_BASE + index
+            self._emit_lines([
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                f"@{addr} // POP TEMP {index}(RAM[{addr}])",
+                "M=D",
+            ])
+            return
+        
         raise ValueError(f"Unsupported push/pop for now: {command} {segment} {index}")
     
     def close(self) -> None:
@@ -249,8 +425,8 @@ class CodeWriter:
                 f.write(line + "\n")
 
 
-if __name__ == "__main__":
-    w = CodeWriter("Mini.asm")
-    w.writePushPop("push", "constant", 7)
-    w.writeArithmetic("add")
-    w.close()
+# if __name__ == "__main__":
+#     w = CodeWriter("Mini.asm")
+#     w.writePushPop("push", "constant", 7)
+#     w.writeArithmetic("add")
+#     w.close()
