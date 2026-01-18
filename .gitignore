@@ -17,3 +17,4 @@ tools/bin/*.tmp
 # Editor / IDE
 .vscode/
 .idea/
+_local_ignored/
