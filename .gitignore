@@ -13,4 +13,7 @@ __pycache__/
 # Editor / IDE
 .vscode/
 .idea/
-EOF
+
+# Nand2Tetris tools runtime artifacts
+tools/bin/*.dat
+tools/bin/*.tmp
