@@ -24,6 +24,68 @@ class CodeWriter:
                 "M=M+1",
             ])
             return
+        
+        if command == "sub":
+            self._emit_lines([
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",  # y
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "M=M-D", # x -y
+                "@SP",
+                "M=M+1",
+            ])
+            return
+        
+        if command == "neg":
+            self._emit_lines([
+                "@SP",
+                "A=M-1",
+                "M=-M",
+            ])
+            return
+        
+        if command == "and":
+            self._emit_lines([
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "M=D&M",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+
+        if command == "or":
+            self._emit_lines([
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "M=D|M",
+                "@SP",
+                "M=M+1",
+            ])
+            return
+
+        if command == "not":
+            self._emit_lines([
+                "@SP",
+                "A=M-1",
+                "M=!M",
+            ])
+            return
+    
         raise ValueError(f"Unsupported arithmetic for now: {command}")
     
     def writePushPop(self, command: str, segment: str, index: int) -> None:
