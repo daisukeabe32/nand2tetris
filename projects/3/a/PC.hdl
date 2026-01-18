@@ -14,5 +14,21 @@ CHIP PC {
     OUT out[16];
     
     PARTS:
-    //// Replace this comment with your code.
+    // out + 1
+    Inc16(in=regiout, out=outInc);
+
+    // select: hold(out) or inc(out+1)
+    Mux16(a=regiout, b=outInc, sel=inc, out=holdOrInc);
+
+    // select: previous (hold/inc) or load(in)
+    Mux16(a=holdOrInc, b=in, sel=load, out=preReset);
+
+    // select: preReset or 0 (reset has highest priority)
+    Mux16(a=preReset, b=false, sel=reset, out=next);
+
+    // register should load when any action is requested
+    Or(a=load, b=inc, out=li);
+    Or(a=li, b=reset, out=doLoad);
+
+    Register(in=next, load=doLoad, out=regiout, out=out);
 }

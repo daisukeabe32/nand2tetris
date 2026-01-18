@@ -61,7 +61,7 @@ CHIP ALU {
     Not16(in=fdone, out=notfdone);
     Mux16(a=fdone, b=notfdone, sel=no, out=out, out[0..7]=outlow, out[8..15]=outhigh, out[15]=ng);
     
-    // zr=1 if out==0 (Or8way二段積み)
+    // zr=1 if out==0 (two-level Or8Way reduction)
     Or8Way(in=outlow, out=orlow);
     Or8Way(in=outhigh, out=orhigh);
     Or(a=orlow, b=orhigh, out=orout);

@@ -1,9 +1,16 @@
-# macOS / Python
+# macOS
 .DS_Store
+
+# Python
 __pycache__/
 *.pyc
 
-# Generated outputs
+# Nand2Tetris generated files
 *.asm
 *.hack
 *.out
+
+# Editor / IDE
+.vscode/
+.idea/
+EOF
