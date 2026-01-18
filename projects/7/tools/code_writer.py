@@ -2,6 +2,7 @@ class CodeWriter:
     def __init__(self, asm_path: str):
         self.asm_path = asm_path
         self.out: list[str] = []
+        self.label_id = 0
         
     def _emit(self, line: str) -> None:
         self.out.append(line)
@@ -9,6 +10,10 @@ class CodeWriter:
     def _emit_lines(self, lines: list[str]) -> None:
         self.out.extend(lines)
     
+    def _new_label(self, prefix: str) -> str:
+        label = f"{prefix}.{self.label_id}"
+        self.label_id += 1
+        return label
     def writeArithmetic(self, command: str) -> None:
         if command == "add":
             self._emit_lines([
