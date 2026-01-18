@@ -10,10 +10,10 @@ __pycache__/
 *.hack
 *.out
 
-# Editor / IDE
-.vscode/
-.idea/
-
 # Nand2Tetris tools runtime artifacts
 tools/bin/*.dat
 tools/bin/*.tmp
+
+# Editor / IDE
+.vscode/
+.idea/
