@@ -90,7 +90,47 @@ class CodeWriter:
                 "M=!M",
             ])
             return
-    
+        
+        if command == "eq":
+            true_label = self._new_label("EQ_TRUE")
+            end_label = self._new_label("EQ_END")
+            
+            self._emit_lines([
+                #pop y --> D
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                
+                # pop x, compute x - y -> D
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M-D",
+                
+                #if x-y == 0 jump TRUE
+                f"@{true_label}",
+                "D;JEQ",
+                
+                # false: *SP = 0
+                "@SP",
+                "A=M",
+                "M=0",
+                f"@{end_label}",
+                "0;JMP",
+                
+                # true: *SP = -1
+                f"({true_label})",
+                "@SP",
+                "A=M",
+                "M=-1",
+                
+                # end: SP++
+                f"({end_label})",
+                "@SP",
+                "M=M+1",   
+            ])
+            return
         raise ValueError(f"Unsupported arithmetic for now: {command}")
     
     def writePushPop(self, command: str, segment: str, index: int) -> None:
