@@ -4,16 +4,20 @@ class CodeWriter:
         self.out: list[str] = []
         self.label_id = 0
         
+        # bootstrap
+        self._emit_lines([
+            "// Bootstrap",
+            "@256",
+            "D=A",
+            "@SP",
+            "M=D",
+        ])
+        
     def _emit(self, line: str) -> None:
         self.out.append(line)
         
     def _emit_lines(self, lines: list[str]) -> None:
         self.out.extend(lines)
-    
-    # def _new_label(self, prefix: str) -> str:
-    #     label = f"{prefix}.{self.label_id}"
-    #     self.label_id += 1
-    #     return label
     
     def _new_id(self) -> int:
         uid = self.label_id
@@ -23,7 +27,7 @@ class CodeWriter:
     def writeArithmetic(self, command: str) -> None:
         if command == "add":
             self._emit_lines([
-                "@SP",
+                "@SP // ADD Started",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -38,7 +42,7 @@ class CodeWriter:
         
         if command == "sub":
             self._emit_lines([
-                "@SP",
+                "@SP // SUB Started",
                 "M=M-1",
                 "A=M",
                 "D=M",  # y
@@ -53,7 +57,7 @@ class CodeWriter:
         
         if command == "neg":
             self._emit_lines([
-                "@SP",
+                "@SP // NEG Started",
                 "A=M-1",
                 "M=-M",
             ])
@@ -61,7 +65,7 @@ class CodeWriter:
         
         if command == "and":
             self._emit_lines([
-                "@SP",
+                "@SP // And Started",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -76,7 +80,7 @@ class CodeWriter:
 
         if command == "or":
             self._emit_lines([
-                "@SP",
+                "@SP // OR Started",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -104,7 +108,7 @@ class CodeWriter:
             
             self._emit_lines([
                 #pop y --> D
-                "@SP",
+                "@SP // EQ Started",
                 "M=M-1",
                 "A=M",
                 "D=M",
@@ -139,12 +143,96 @@ class CodeWriter:
             ])
             return
         
+        if command == "lt":
+            uid = self._new_id()
+            true_label = f"LT_TRUE.{uid}"
+            end_label = f"LT_END.{uid}"
+            
+            self._emit_lines([
+                #pop y --> D
+                "@SP // LT Started",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                
+                # pop x, compute x - y -> D
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M-D",
+                
+                #if x-y < 0 jump TRUE
+                f"@{true_label}",
+                "D;JLT",
+                
+                # false: *SP = 0
+                "@SP",
+                "A=M",
+                "M=0",
+                f"@{end_label}",
+                "0;JMP",
+                
+                # true: *SP = -1
+                f"({true_label})",
+                "@SP",
+                "A=M",
+                "M=-1",
+                
+                # end: SP++
+                f"({end_label})",
+                "@SP",
+                "M=M+1",   
+            ])
+            return
+        
+        if command == "gt":
+            uid = self._new_id()
+            true_label = f"GT_TRUE.{uid}"
+            end_label = f"GT_END.{uid}"
+            
+            self._emit_lines([
+                #pop y --> D
+                "@SP // GT Started",
+                "M=M-1",
+                "A=M",
+                "D=M",
+                
+                # pop x, compute x - y -> D
+                "@SP",
+                "M=M-1",
+                "A=M",
+                "D=M-D",
+                
+                #if x-y > 0 jump TRUE
+                f"@{true_label}",
+                "D;JGT",
+                
+                # false: *SP = 0
+                "@SP",
+                "A=M",
+                "M=0",
+                f"@{end_label}",
+                "0;JMP",
+                
+                # true: *SP = -1
+                f"({true_label})",
+                "@SP",
+                "A=M",
+                "M=-1",
+                
+                # end: SP++
+                f"({end_label})",
+                "@SP",
+                "M=M+1",   
+            ])
+            return
+        
         raise ValueError(f"Unsupported arithmetic for now: {command}")
     
     def writePushPop(self, command: str, segment: str, index: int) -> None:
         if command == "push" and segment == "constant":
             self._emit_lines([
-                f"@{index}",
+                f"@{index} // PUSH CONSTANT Started",
                 "D=A",
                 "@SP",
                 "A=M",
@@ -159,7 +247,6 @@ class CodeWriter:
         with open(self.asm_path, "w", encoding="utf-8") as f:
             for line in self.out:
                 f.write(line + "\n")
-        print("DONE!!")
 
 
 if __name__ == "__main__":
