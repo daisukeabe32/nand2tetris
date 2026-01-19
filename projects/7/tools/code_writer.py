@@ -1,9 +1,41 @@
+import os
+
 class CodeWriter:
+    TEMP_BASE = 5
+    SEG_BASE = {
+        "local": "LCL",
+        "argument": "ARG",
+        "this": "THIS",
+        "that": "THAT",
+    }
+
+    # ALU op mapping for binary ops that produce x op y
+    _BIN_OP = {
+        "add": "M=D+M",
+        "sub": "M=M-D",   # x - y  (x in M, y in D)
+        "and": "M=D&M",
+        "or":  "M=D|M",
+    }
+
+    # unary ops apply to top of stack (in-place)
+    _UNARY_OP = {
+        "neg": "M=-M",
+        "not": "M=!M",
+    }
+
+    # comparisons jump condition (after D = x - y)
+    _CMP_JUMP = {
+        "eq": "D;JEQ",
+        "lt": "D;JLT",
+        "gt": "D;JGT",
+    }
+
     def __init__(self, asm_path: str):
         self.asm_path = asm_path
         self.out: list[str] = []
         self.label_id = 0
-        
+        self.file_stem: str | None = None
+
         # bootstrap
         self._emit_lines([
             "// Bootstrap",
@@ -12,416 +44,213 @@ class CodeWriter:
             "@SP",
             "M=D",
         ])
-        self.file_stem = None
-        
-    def _emit(self, line: str) -> None:
-        self.out.append(line)
-        
-    def _emit_lines(self, lines: list[str]) -> None:
-        self.out.extend(lines)
-    
+
     def _new_id(self) -> int:
         uid = self.label_id
         self.label_id += 1
         return uid
-    
+
+    def _emit(self, line: str) -> None:
+        self.out.append(line)
+
+    def _emit_lines(self, lines: list[str]) -> None:
+        self.out.extend(lines)
+
     def setFileName(self, vm_path: str) -> None:
-        import os
         self.file_stem = os.path.splitext(os.path.basename(vm_path))[0]
-    
+
+    # ---------- stack helpers ----------
+    def _push_D(self) -> None:
+        self._emit_lines([
+            "@SP",
+            "A=M",
+            "M=D",
+            "@SP",
+            "M=M+1",
+        ])
+
+    def _pop_to_D(self) -> None:
+        self._emit_lines([
+            "@SP",
+            "M=M-1",
+            "A=M",
+            "D=M",
+        ])
+
+    def _top_to_D(self) -> None:
+        """D = *SP (top element) without popping."""
+        self._emit_lines([
+            "@SP",
+            "A=M-1",
+            "D=M",
+        ])
+
+    # ---------- addr helpers ----------
+    def _compute_base_plus_index_to_R13(self, base_sym: str, index: int) -> None:
+        self._emit_lines([
+            f"@{base_sym}",
+            "D=M",
+            f"@{index}",
+            "D=D+A",
+            "@R13",
+            "M=D",
+        ])
+
+    def _push_from_R13_addr(self) -> None:
+        self._emit_lines([
+            "@R13",
+            "A=M",
+            "D=M",
+        ])
+        self._push_D()
+
+    def _pop_to_R13_addr(self) -> None:
+        self._pop_to_D()
+        self._emit_lines([
+            "@R13",
+            "A=M",
+            "M=D",
+        ])
+
+    def _push_from_symbol(self, sym: str) -> None:
+        self._emit_lines([f"@{sym}", "D=M"])
+        self._push_D()
+
+    def _pop_to_symbol(self, sym: str) -> None:
+        self._pop_to_D()
+        self._emit_lines([f"@{sym}", "M=D"])
+
+    # ---------- arithmetic helpers ----------
+    def _binary_op(self, op_line: str, comment: str = "") -> None:
+        """
+        Stack: [..., x, y] -> [..., (x op y)]
+        Implementation:
+          pop y -> D
+          pop x -> M (A points to x)
+          M = (x op y)   (using D and M)
+          SP++
+        """
+        self._emit_lines([
+            f"// {comment}".rstrip(),
+            "@SP",
+            "M=M-1",
+            "A=M",
+            "D=M",    # y
+            "@SP",
+            "M=M-1",
+            "A=M",    # x at *SP
+            op_line,  # compute into M
+            "@SP",
+            "M=M+1",
+        ])
+
+    def _unary_op(self, op_line: str, comment: str = "") -> None:
+        """
+        Stack: [..., x] -> [..., op(x)]
+        in-place on top element
+        """
+        self._emit_lines([
+            f"// {comment}".rstrip(),
+            "@SP",
+            "A=M-1",
+            op_line,
+        ])
+
+    def _compare(self, jump_line: str, prefix: str) -> None:
+        """
+        Stack: [..., x, y] -> [..., (x ? y)]
+        where true = -1, false = 0
+        Implementation:
+          pop y -> D
+          pop x -> D = x - y
+          if D ? 0 jump TRUE
+          false: *SP = 0; goto END
+          true:  *SP = -1
+          END: SP++
+        """
+        uid = self._new_id()
+        true_label = f"{prefix}_TRUE.{uid}"
+        end_label  = f"{prefix}_END.{uid}"
+
+        self._emit_lines([
+            f"// {prefix}",
+            "@SP",
+            "M=M-1",
+            "A=M",
+            "D=M",        # y
+            "@SP",
+            "M=M-1",
+            "A=M",
+            "D=M-D",      # x - y
+            f"@{true_label}",
+            jump_line,
+            "@SP",
+            "A=M",
+            "M=0",        # false
+            f"@{end_label}",
+            "0;JMP",
+            f"({true_label})",
+            "@SP",
+            "A=M",
+            "M=-1",       # true
+            f"({end_label})",
+            "@SP",
+            "M=M+1",
+        ])
+
     def writeArithmetic(self, command: str) -> None:
-        if command == "add":
-            self._emit_lines([
-                "@SP // ADD ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "M=D+M",
-                "@SP",
-                "M=M+1",
-            ])
-            return
-        
-        if command == "sub":
-            self._emit_lines([
-                "@SP // SUB ",
-                "M=M-1",
-                "A=M",
-                "D=M",  # y
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "M=M-D", # x -y
-                "@SP",
-                "M=M+1",
-            ])
-            return
-        
-        if command == "neg":
-            self._emit_lines([
-                "@SP // NEG ",
-                "A=M-1",
-                "M=-M",
-            ])
-            return
-        
-        if command == "and":
-            self._emit_lines([
-                "@SP // And ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "M=D&M",
-                "@SP",
-                "M=M+1",
-            ])
+        # 1) binary ops
+        if command in self._BIN_OP:
+            self._binary_op(self._BIN_OP[command], comment=command.upper())
             return
 
-        if command == "or":
-            self._emit_lines([
-                "@SP // OR ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "M=D|M",
-                "@SP",
-                "M=M+1",
-            ])
+        # 2) unary ops
+        if command in self._UNARY_OP:
+            self._unary_op(self._UNARY_OP[command], comment=command.upper())
             return
 
-        if command == "not":
-            self._emit_lines([
-                "@SP // NOT ",
-                "A=M-1",
-                "M=!M",
-            ])
+        # 3) comparisons
+        if command in self._CMP_JUMP:
+            self._compare(self._CMP_JUMP[command], prefix=command.upper())
             return
-        
-        if command == "eq":
-            uid = self._new_id()
-            true_label = f"EQ_TRUE.{uid}"
-            end_label = f"EQ_END.{uid}"
-            
-            self._emit_lines([
-                #pop y --> D
-                "@SP // EQ ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                
-                # pop x, compute x - y -> D
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M-D",
-                
-                #if x-y == 0 jump TRUE
-                f"@{true_label}",
-                "D;JEQ",
-                
-                # false: *SP = 0
-                "@SP",
-                "A=M",
-                "M=0",
-                f"@{end_label}",
-                "0;JMP",
-                
-                # true: *SP = -1
-                f"({true_label})",
-                "@SP",
-                "A=M",
-                "M=-1",
-                
-                # end: SP++
-                f"({end_label})",
-                "@SP",
-                "M=M+1",   
-            ])
-            return
-        
-        if command == "lt":
-            uid = self._new_id()
-            true_label = f"LT_TRUE.{uid}"
-            end_label = f"LT_END.{uid}"
-            
-            self._emit_lines([
-                #pop y --> D
-                "@SP // LT ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                
-                # pop x, compute x - y -> D
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M-D",
-                
-                #if x-y < 0 jump TRUE
-                f"@{true_label}",
-                "D;JLT",
-                
-                # false: *SP = 0
-                "@SP",
-                "A=M",
-                "M=0",
-                f"@{end_label}",
-                "0;JMP",
-                
-                # true: *SP = -1
-                f"({true_label})",
-                "@SP",
-                "A=M",
-                "M=-1",
-                
-                # end: SP++
-                f"({end_label})",
-                "@SP",
-                "M=M+1",   
-            ])
-            return
-        
-        if command == "gt":
-            uid = self._new_id()
-            true_label = f"GT_TRUE.{uid}"
-            end_label = f"GT_END.{uid}"
-            
-            self._emit_lines([
-                #pop y --> D
-                "@SP // GT ",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                
-                # pop x, compute x - y -> D
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M-D",
-                
-                #if x-y > 0 jump TRUE
-                f"@{true_label}",
-                "D;JGT",
-                
-                # false: *SP = 0
-                "@SP",
-                "A=M",
-                "M=0",
-                f"@{end_label}",
-                "0;JMP",
-                
-                # true: *SP = -1
-                f"({true_label})",
-                "@SP",
-                "A=M",
-                "M=-1",
-                
-                # end: SP++
-                f"({end_label})",
-                "@SP",
-                "M=M+1",   
-            ])
-            return
-        
-        raise ValueError(f"Unsupported arithmetic for now: {command}")
-    
+
+        raise ValueError(f"Unsupported arithmetic: {command}")
+
     def writePushPop(self, command: str, segment: str, index: int) -> None:
-        if command == "push" and segment == "constant":
-            self._emit_lines([
-                f"@{index} // PUSH CONSTANT ",
-                "D=A",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
+        if command not in ("push", "pop"):
+            raise ValueError(f"Unknown command: {command}")
+
+        # 1) constant
+        if segment == "constant":
+            if command != "push":
+                raise ValueError("constant supports only push")
+            self._emit_lines([f"@{index}", "D=A"])
+            self._push_D()
             return
-        
-        if command == "push" and segment == "local":
-            self._emit_lines([
-                "@LCL // PUSH LOCAL ",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "A=M",
-                "D=M",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
+
+        # 2) local/argument/this/that (base + index)
+        if segment in self.SEG_BASE:
+            base_sym = self.SEG_BASE[segment]
+            self._compute_base_plus_index_to_R13(base_sym, index)
+            if command == "push":
+                self._push_from_R13_addr()
+            else:
+                self._pop_to_R13_addr()
             return
-        
-        if command == "pop" and segment == "local":
-            self._emit_lines([
-                "@LCL // POP LOCAL",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@R13",
-                "A=M",
-                "M=D",
-            ])
-            return
-        
-        if command == "push" and segment == "argument":
-            self._emit_lines([
-                "@ARG // PUSH ARG ",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "A=M",
-                "D=M",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
-            return
-        
-        if command == "pop" and segment == "argument":
-            self._emit_lines([
-                "@ARG // POP ARG",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@R13",
-                "A=M",
-                "M=D",
-            ])
-            return
-        
-        if command == "push" and segment == "this":
-            self._emit_lines([
-                "@THIS // PUSH THIS ",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "A=M",
-                "D=M",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
-            return
-        
-        if command == "pop" and segment == "this":
-            self._emit_lines([
-                "@THIS // POP THIS",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@R13",
-                "A=M",
-                "M=D",
-            ])
-            return
-        
-        if command == "push" and segment == "that":
-            self._emit_lines([
-                "@THAT // PUSH THAT ",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "A=M",
-                "D=M",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
-            return
-        
-        if command == "pop" and segment == "that":
-            self._emit_lines([
-                "@THAT // POP THAT",
-                "D=M",
-                f"@{index}",
-                "D=D+A",
-                "@R13",
-                "M=D",
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                "@R13",
-                "A=M",
-                "M=D",
-            ])
-            return
-        
-        
-        TEMP_BASE = 5
-        if command == "push" and segment == "temp":
+
+        # 3) temp (direct address 5..12)
+        if segment == "temp":
             if not (0 <= index <= 7):
                 raise ValueError(f"temp index out of range: {index}")
-            addr = TEMP_BASE + index
-            self._emit_lines([
-                f"@{addr} // PUSH TEMP {index}(RAM[{addr}]) ",
-                "D=M",
-                "@SP",
-                "A=M",
-                "M=D",
-                "@SP",
-                "M=M+1",
-            ])
+            addr = self.TEMP_BASE + index
+            sym = str(addr)
+            if command == "push":
+                self._push_from_symbol(sym)
+            else:
+                self._pop_to_symbol(sym)
             return
-        
-        if command == "pop" and segment == "temp":
-            if not (0 <= index <= 7):
-                raise ValueError(f"temp index out of range: {index}")
-            addr = TEMP_BASE + index
-            self._emit_lines([
-                "@SP",
-                "M=M-1",
-                "A=M",
-                "D=M",
-                f"@{addr} // POP TEMP {index}(RAM[{addr}])",
-                "M=D",
-            ])
-            return
-        
+
+        # 4) pointer (0->THIS, 1->THAT)
         if segment == "pointer":
             if index == 0:
                 sym = "THIS"
@@ -431,66 +260,26 @@ class CodeWriter:
                 raise ValueError(f"pointer index must be 0 or 1: {index}")
 
             if command == "push":
-                self._emit_lines([
-                    f"@{sym} // PUSH POINTER {index}",
-                    "D=M",
-                    "@SP",
-                    "A=M",
-                    "M=D",
-                    "@SP",
-                    "M=M+1",
-                ])
-                return
+                self._push_from_symbol(sym)
+            else:
+                self._pop_to_symbol(sym)
+            return
 
-            if command == "pop":
-                self._emit_lines([
-                    f"@SP // POP POINTER {index}",
-                    "M=M-1",
-                    "A=M",
-                    "D=M",
-                    f"@{sym}",
-                    "M=D",
-                ])
-                return
-        
+        # 5) static (FileName.index)
         if segment == "static":
             if self.file_stem is None:
                 raise RuntimeError("setFileName() must be called before using static segment")
             sym = f"{self.file_stem}.{index}"
-            
+
             if command == "push":
-                self._emit_lines([
-                    f"@{sym} // PUSH STATIC {index}",
-                    "D=M",
-                    "@SP",
-                    "A=M",
-                    "M=D",
-                    "@SP",
-                    "M=M+1",
-                ])
-                return
-            
-            if command == "pop":
-                self._emit_lines([
-                    "@SP // POP STATIC",
-                    "M=M-1",
-                    "A=M",
-                    "D=M",
-                    f"@{sym}",
-                    "M=D"
-                ])
-                return
-            
-        raise ValueError(f"Unsupported push/pop for now: {command} {segment} {index}")
-    
+                self._push_from_symbol(sym)
+            else:
+                self._pop_to_symbol(sym)
+            return
+
+        raise ValueError(f"Unsupported segment: {segment}")
+
     def close(self) -> None:
         with open(self.asm_path, "w", encoding="utf-8") as f:
             for line in self.out:
                 f.write(line + "\n")
-
-
-# if __name__ == "__main__":
-#     w = CodeWriter("Mini.asm")
-#     w.writePushPop("push", "constant", 7)
-#     w.writeArithmetic("add")
-#     w.close()
