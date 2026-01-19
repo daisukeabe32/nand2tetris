@@ -13,6 +13,7 @@ def main():
     
     parser = Parser(vm_path)
     writer = CodeWriter(asm_path)
+    writer.setFileName(vm_path)
     
     while parser.hasMoreLines():
         parser.advance()

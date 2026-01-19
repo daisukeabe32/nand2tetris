@@ -12,6 +12,7 @@ class CodeWriter:
             "@SP",
             "M=D",
         ])
+        self.file_stem = None
         
     def _emit(self, line: str) -> None:
         self.out.append(line)
@@ -23,6 +24,10 @@ class CodeWriter:
         uid = self.label_id
         self.label_id += 1
         return uid
+    
+    def setFileName(self, vm_path: str) -> None:
+        import os
+        self.file_stem = os.path.splitext(os.path.basename(vm_path))[0]
     
     def writeArithmetic(self, command: str) -> None:
         if command == "add":
@@ -445,6 +450,34 @@ class CodeWriter:
                     "D=M",
                     f"@{sym}",
                     "M=D",
+                ])
+                return
+        
+        if segment == "static":
+            if self.file_stem is None:
+                raise RuntimeError("setFileName() must be called before using static segment")
+            sym = f"{self.file_stem}.{index}"
+            
+            if command == "push":
+                self._emit_lines([
+                    f"@{sym} // PUSH STATIC {index}",
+                    "D=M",
+                    "@SP",
+                    "A=M",
+                    "M=D",
+                    "@SP",
+                    "M=M+1",
+                ])
+                return
+            
+            if command == "pop":
+                self._emit_lines([
+                    "@SP // POP STATIC",
+                    "M=M-1",
+                    "A=M",
+                    "D=M",
+                    f"@{sym}",
+                    "M=D"
                 ])
                 return
             
