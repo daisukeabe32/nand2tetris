@@ -417,6 +417,37 @@ class CodeWriter:
             ])
             return
         
+        if segment == "pointer":
+            if index == 0:
+                sym = "THIS"
+            elif index == 1:
+                sym = "THAT"
+            else:
+                raise ValueError(f"pointer index must be 0 or 1: {index}")
+
+            if command == "push":
+                self._emit_lines([
+                    f"@{sym} // PUSH POINTER {index}",
+                    "D=M",
+                    "@SP",
+                    "A=M",
+                    "M=D",
+                    "@SP",
+                    "M=M+1",
+                ])
+                return
+
+            if command == "pop":
+                self._emit_lines([
+                    f"@SP // POP POINTER {index}",
+                    "M=M-1",
+                    "A=M",
+                    "D=M",
+                    f"@{sym}",
+                    "M=D",
+                ])
+                return
+            
         raise ValueError(f"Unsupported push/pop for now: {command} {segment} {index}")
     
     def close(self) -> None:
