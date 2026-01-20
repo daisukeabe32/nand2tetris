@@ -1,3 +1,5 @@
+# code_writer.py
+
 import os
 
 class CodeWriter:
@@ -61,12 +63,17 @@ class CodeWriter:
     def setFileName(self, vm_path: str) -> None:
         self.file_stem = os.path.splitext(os.path.basename(vm_path))[0]
 
-    # ---------- for the functions ----------
+    # ---------- for functions/call ----------
     def _scoped_label(self, label: str) -> str:
         if self.current_function:
             return f"{self.current_function}${label}"
         return label
-        
+    
+    def _new_call_ret_label(self, function_name: str) -> str:
+        label = f"{function_name}$ret.{self.call_id}"
+        self.call_id += 1
+        return label
+    
     # ---------- stack helpers ----------
     def _push_D(self) -> None:
         self._emit_lines([
@@ -93,6 +100,13 @@ class CodeWriter:
             "D=M",
         ])
 
+    def _push_A(self, value: int) -> None:
+        self._emit_lines([f"@{value}", "D=A"])
+        self._push_D()
+        
+    def _store_D_to_symbol(self, sym: str) -> None:
+        self._emit_lines([f"@{sym}", "M=D"])
+        
     # ---------- addr helpers ----------
     def _compute_base_plus_index_to_R13(self, base_sym: str, index: int) -> None:
         self._emit_lines([
@@ -130,14 +144,6 @@ class CodeWriter:
 
     # ---------- arithmetic helpers ----------
     def _binary_op(self, op_line: str, comment: str = "") -> None:
-        """
-        Stack: [..., x, y] -> [..., (x op y)]
-        Implementation:
-          pop y -> D
-          pop x -> M (A points to x)
-          M = (x op y)   (using D and M)
-          SP++
-        """
         self._emit_lines([
             f"// {comment}",
             "@SP",
@@ -153,10 +159,6 @@ class CodeWriter:
         ])
 
     def _unary_op(self, op_line: str, comment: str = "") -> None:
-        """
-        Stack: [..., x] -> [..., op(x)]
-        in-place on top element
-        """
         self._emit_lines([
             f"// {comment}",
             "@SP",
@@ -165,17 +167,6 @@ class CodeWriter:
         ])
 
     def _compare(self, jump_line: str, prefix: str) -> None:
-        """
-        Stack: [..., x, y] -> [..., (x ? y)]
-        where true = -1, false = 0
-        Implementation:
-          pop y -> D
-          pop x -> D = x - y
-          if D ? 0 jump TRUE
-          false: *SP = 0; goto END
-          true:  *SP = -1
-          END: SP++
-        """
         uid = self._new_id()
         true_label = f"{prefix}_TRUE.{uid}"
         end_label  = f"{prefix}_END.{uid}"
@@ -205,7 +196,7 @@ class CodeWriter:
             "@SP",
             "M=M+1",
         ])
-
+    
     def writeArithmetic(self, command: str) -> None:
         # 1) binary ops
         if command in self._BIN_OP:
@@ -310,11 +301,129 @@ class CodeWriter:
             self._emit_lines(["@0", "D=A"])
             self._push_D()
             
-    def writeCall(self, x, y) -> None:
-        pass
+    def writeCall(self, function_name: str, n_args: int) -> None:
+        # 1) push return-address
+        ret_label = self._new_call_ret_label(function_name)
+        self._emit(f"// call {function_name} {n_args}")
+        self._emit_lines([f"@{ret_label}", "D=A"])
+        self._push_D()
+
+        # 2) push LCL, ARG, THIS, THAT
+        for sym in ("LCL", "ARG", "THIS", "THAT"):
+            self._emit_lines([f"@{sym} // push {sym}", "D=M"])
+            self._push_D()
+
+        # 3) ARG = SP - 5 - n_args
+        # D = SP
+        self._emit_lines(["@SP // update *ARG", "D=M"])
+        # D = D - (5 + n_args)
+        self._emit_lines([f"@{5 + n_args}", "D=D-A"])
+        self._store_D_to_symbol("ARG")
+
+        # 4) LCL = SP
+        self._emit_lines(["@SP // update *LCL", "D=M"])
+        self._store_D_to_symbol("LCL")
+
+        # 5) goto function
+        self._emit_lines([f"@{function_name} // goto function", "0;JMP"])
+
+        # 6) (return-address)
+        self._emit_lines([f"({ret_label})"])
     
     def writeReturn(self) -> None:
-        pass
+        self._emit("// return (R1: FRAME=LCL)")
+        
+        # FRAME = LCL  (R13 = LCL)
+        self._emit_lines([
+            "@LCL",
+            "D=M",
+            "@R13",
+            "M=D"
+        ])
+        
+        # RET = *(FRAME - 5)  (R14 = RAM[FRAME-5])
+        self._emit_lines([
+            "@R13",
+            "D=M",       # D = FRAME
+            "@5",
+            "A=D-A",     # A = FRAME - 5
+            "D=M",       # D = *(FRAME - 5)
+            "@R14",
+            "M=D",       # R14 = RET
+        ])
+        
+        # *ARG = pop()   (return value to caller)
+        self._emit_lines([
+            "@SP",
+            "M=M-1",
+            "A=M",
+            "D=M",       # D = return value
+            "@ARG",
+            "A=M",
+            "M=D",       # *ARG = return value
+        ])
+
+        # SP = ARG + 1
+        self._emit_lines([
+            "@ARG",
+            "D=M",
+            "@1",
+            "D=D+A",
+            "@SP",
+            "M=D",
+        ])
+        
+        # Restore THAT, THIS, ARG, LCL from FRAME (R13)
+        # Restore THAT = *(FRAME-1)
+        self._emit_lines([
+            "@R13",
+            "D=M",
+            "@1",
+            "A=D-A",
+            "D=M",
+            "@THAT",
+            "M=D",
+        ])
+
+        # Restore THIS = *(FRAME-2)
+        self._emit_lines([
+            "@R13",
+            "D=M",
+            "@2",
+            "A=D-A",
+            "D=M",
+            "@THIS",
+            "M=D",
+        ])
+
+        # Restore ARG = *(FRAME-3)
+        self._emit_lines([
+            "@R13",
+            "D=M",
+            "@3",
+            "A=D-A",
+            "D=M",
+            "@ARG",
+            "M=D",
+        ])
+
+        # Restore LCL = *(FRAME-4)
+        self._emit_lines([
+            "@R13",
+            "D=M",
+            "@4",
+            "A=D-A",
+            "D=M",
+            "@LCL",
+            "M=D",
+        ])
+
+        # goto RET
+        self._emit_lines([
+            "@R14",
+            "A=M",
+            "0;JMP",
+        ])
     
     def close(self) -> None:
         with open(self.asm_path, "w", encoding="utf-8") as f:
