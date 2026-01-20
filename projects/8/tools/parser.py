@@ -4,6 +4,9 @@ C_POP = "C_POP"
 C_LABEL = "C_LABEL"
 C_GOTO = "C_GOTO"
 C_IF = "C_IF"
+C_FUNCTION = "C_FUNCTION"
+C_CALL = "C_CALL"
+C_RETURN = "C_RETURN"
 
 ARITHMETIC_COMMANDS = {
     "add", "sub", "neg",
@@ -46,6 +49,12 @@ class Parser:
             return C_GOTO
         elif cmd == "if-goto":
             return C_IF
+        elif cmd == "function":
+            return C_FUNCTION
+        elif cmd == "call":
+            return C_CALL
+        elif cmd == "return":
+            return C_RETURN
         
         return ""
     
@@ -55,18 +64,18 @@ class Parser:
         
         if ctype == C_ARITHMETIC:
             return parts[0]
-        elif ctype in (C_PUSH, C_POP, C_LABEL, C_GOTO, C_IF):
+        elif ctype in (C_PUSH, C_POP, C_LABEL, C_GOTO, C_IF, C_FUNCTION, C_CALL):
             return parts[1]
 
         raise RuntimeError(f"arg1() called on unknown type: {self.current_line}")
         
     def arg2(self) -> int:
         ctype = self.commandType()
-        if ctype not in (C_PUSH, C_POP):
-            raise RuntimeError(f"arg2() called on non push/pop: {self.current_line}")
+        
+        if ctype not in (C_PUSH, C_POP, C_FUNCTION, C_CALL):
+            raise RuntimeError(f"arg2() called on invalid command: {self.current_line}")
         
         parts = self.current_line.split()
-        
         return int(parts[2])
 
 

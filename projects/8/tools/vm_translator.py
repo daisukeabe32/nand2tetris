@@ -43,6 +43,15 @@ def main():
         
         elif ctype == "C_IF":
             writer.writeIf(parser.arg1())
+        
+        elif ctype == "C_FUNCTION":
+            writer.writeFunction(parser.arg1(), parser.arg2())
+            
+        elif ctype == "C_CALL":
+            writer.writeCall(parser.arg1(), parser.arg2())
+            
+        elif ctype == "C_RETURN":
+            writer.writeReturn()
             
         else:
             raise ValueError(f"Unknown command type: {ctype}")

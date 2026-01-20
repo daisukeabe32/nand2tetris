@@ -66,23 +66,6 @@ class CodeWriter:
         if self.current_function:
             return f"{self.current_function}${label}"
         return label
-    
-    def writeLabel(self, label: str) -> None:
-        self._emit_lines([f"({self._scoped_label(label)}) // label"])
-        
-    def writeGoto(self, label: str) -> None:
-        self._emit_lines([
-            f"@{self._scoped_label(label)} // goto",
-            "0;JMP",
-        ]) 
-    
-    def writeIf(self, label: str) -> None:
-        self._emit("// if-goto")
-        self._pop_to_D()
-        self._emit_lines([
-            f"@{self._scoped_label(label)}",
-            "D;JNE",
-        ])
         
     # ---------- stack helpers ----------
     def _push_D(self) -> None:
@@ -304,6 +287,32 @@ class CodeWriter:
 
         raise ValueError(f"Unsupported segment: {segment}")
 
+    def writeLabel(self, label: str) -> None:
+        self._emit_lines([f"({self._scoped_label(label)}) // label"])
+        
+    def writeGoto(self, label: str) -> None:
+        self._emit_lines([
+            f"@{self._scoped_label(label)} // goto",
+            "0;JMP",
+        ]) 
+    
+    def writeIf(self, label: str) -> None:
+        self._emit("// if-goto")
+        self._pop_to_D()
+        self._emit_lines([
+            f"@{self._scoped_label(label)}",
+            "D;JNE",
+        ])
+        
+    def writeFunction(self, x, y) -> None:
+        pass
+    
+    def writeCall(self, x, y) -> None:
+        pass
+    
+    def writeReturn(self) -> None:
+        pass
+    
     def close(self) -> None:
         with open(self.asm_path, "w", encoding="utf-8") as f:
             for line in self.out:
