@@ -1,6 +1,9 @@
 C_ARITHMETIC = "C_ARITHMETIC"
 C_PUSH = "C_PUSH"
 C_POP = "C_POP"
+C_LABEL = "C_LABEL"
+C_GOTO = "C_GOTO"
+C_IF = "C_IF"
 
 ARITHMETIC_COMMANDS = {
     "add", "sub", "neg",
@@ -37,17 +40,22 @@ class Parser:
             return C_PUSH
         elif cmd == "pop":
             return C_POP
+        elif cmd == "label":
+            return C_LABEL
+        elif cmd == "goto":
+            return C_GOTO
+        elif cmd == "if-goto":
+            return C_IF
         
         return ""
     
     def arg1(self) -> str:
         parts = self.current_line.split()
         ctype = self.commandType()
-
         
         if ctype == C_ARITHMETIC:
             return parts[0]
-        elif ctype in (C_PUSH, C_POP):
+        elif ctype in (C_PUSH, C_POP, C_LABEL, C_GOTO, C_IF):
             return parts[1]
 
         raise RuntimeError(f"arg1() called on unknown type: {self.current_line}")

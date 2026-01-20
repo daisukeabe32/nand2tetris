@@ -35,7 +35,9 @@ class CodeWriter:
         self.out: list[str] = []
         self.label_id = 0
         self.file_stem: str | None = None
-
+        self.current_function = ""
+        self.call_id = 0
+        
         # bootstrap
         self._emit_lines([
             "// Bootstrap",
@@ -59,6 +61,29 @@ class CodeWriter:
     def setFileName(self, vm_path: str) -> None:
         self.file_stem = os.path.splitext(os.path.basename(vm_path))[0]
 
+    # ---------- for the functions ----------
+    def _scoped_label(self, label: str) -> str:
+        if self.current_function:
+            return f"{self.current_function}${label}"
+        return label
+    
+    def writeLabel(self, label: str) -> None:
+        self._emit_lines([f"({self._scoped_label(label)}) // label"])
+        
+    def writeGoto(self, label: str) -> None:
+        self._emit_lines([
+            f"@{self._scoped_label(label)} // goto",
+            "0;JMP",
+        ]) 
+    
+    def writeIf(self, label: str) -> None:
+        self._emit("// if-goto")
+        self._pop_to_D()
+        self._emit_lines([
+            f"@{self._scoped_label(label)}",
+            "D;JNE",
+        ])
+        
     # ---------- stack helpers ----------
     def _push_D(self) -> None:
         self._emit_lines([
@@ -224,7 +249,7 @@ class CodeWriter:
         if segment == "constant":
             if command != "push":
                 raise ValueError("constant supports only push")
-            self._emit_lines([f"@{index}", "D=A"])
+            self._emit_lines([f"@{index} // push constant", "D=A"])
             self._push_D()
             return
 

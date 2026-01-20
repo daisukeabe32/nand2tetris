@@ -35,6 +35,15 @@ def main():
                 parser.arg2()
             )
         
+        elif ctype == "C_LABEL":
+            writer.writeLabel(parser.arg1())
+            
+        elif ctype == "C_GOTO":
+            writer.writeGoto(parser.arg1())
+        
+        elif ctype == "C_IF":
+            writer.writeIf(parser.arg1())
+            
         else:
             raise ValueError(f"Unknown command type: {ctype}")
 
