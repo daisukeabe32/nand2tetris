@@ -131,7 +131,7 @@ class CodeWriter:
           SP++
         """
         self._emit_lines([
-            f"// {comment}".rstrip(),
+            f"// {comment}",
             "@SP",
             "M=M-1",
             "A=M",
@@ -150,7 +150,7 @@ class CodeWriter:
         in-place on top element
         """
         self._emit_lines([
-            f"// {comment}".rstrip(),
+            f"// {comment}",
             "@SP",
             "A=M-1",
             op_line,
