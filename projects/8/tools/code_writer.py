@@ -304,9 +304,12 @@ class CodeWriter:
             "D;JNE",
         ])
         
-    def writeFunction(self, x, y) -> None:
-        pass
-    
+    def writeFunction(self, function_name: str, n_locals: int) -> None:
+        self._emit_lines([f"({function_name}) // function {function_name}"])
+        for _ in range(n_locals):
+            self._emit_lines(["@0", "D=A"])
+            self._push_D()
+            
     def writeCall(self, x, y) -> None:
         pass
     
