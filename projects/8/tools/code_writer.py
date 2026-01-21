@@ -48,6 +48,8 @@ class CodeWriter:
             "@SP",
             "M=D",
         ])
+        
+        self.writeCall("Sys.init", 0)
 
     def _new_id(self) -> int:
         uid = self.label_id
@@ -296,6 +298,7 @@ class CodeWriter:
         ])
         
     def writeFunction(self, function_name: str, n_locals: int) -> None:
+        self.current_function = function_name
         self._emit_lines([f"({function_name}) // function {function_name}"])
         for _ in range(n_locals):
             self._emit_lines(["@0", "D=A"])
