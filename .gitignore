@@ -9,6 +9,8 @@ __pycache__/
 *.asm
 *.hack
 *.out
+*.xml
+*T.xml
 
 # Nand2Tetris tools runtime artifacts
 tools/bin/*.dat
