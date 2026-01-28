@@ -138,7 +138,30 @@ class JackTokenizer:
                 out.write(f"  <{tag}> {tok} </{tag}>\n")
             out.write("</tokens>\n")
                 
-                
+    def keyWord(self) -> str:
+        if self.current_type != "KEYWORD":
+            raise ValueError("Current token is not a KEYWORD")
+        return self.current_token
+
+    def symbol(self) -> str:
+        if self.current_type != "SYMBOL":
+            raise ValueError("Current token is not a SYMBOL")
+        return self.current_token
+
+    def identifier(self) -> str:
+        if self.current_type != "IDENTIFIER":
+            raise ValueError("Current token is not an IDENTIFIER")
+        return self.current_token
+
+    def intVal(self) -> int:
+        if self.current_type != "INT_CONST":
+            raise ValueError("Current token is not an INT_CONST")
+        return int(self.current_token)
+
+    def stringVal(self) -> str:
+        if self.current_type != "STRING_CONST":
+            raise ValueError("Current token is not a STRING_CONST")
+        return self.current_token
                 
 if __name__ == "__main__":
     JackTokenizer.write_tokens_xml("../Square/Main.jack", "../Square/MainT.xml")
