@@ -2,6 +2,8 @@
 import os
 import sys
 from CompilationEngine import CompilationEngine
+from CompilationEngine_ref import CompilationEngine_ref
+
 
 def is_jack_file(path: str) -> bool:
     return os.path.isfile(path) and path.lower().endswith(".jack")
