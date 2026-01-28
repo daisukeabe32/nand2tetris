@@ -1,6 +1,11 @@
 from JackTokenizer import JackTokenizer
 
 class CompilationEngine:
+    
+    OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
+    UNARY_OPS = {"-", "~"}
+    KEYWORD_CONSTANTS = {"true", "false", "null", "this"}
+    
     def __init__(self, input_path: str, output_path: str):
         self.tok = JackTokenizer(input_path)
         self.out = open(output_path, "w", encoding="utf-8")
@@ -131,7 +136,115 @@ class CompilationEngine:
         self.eat(expected_token="}", expected_type="SYMBOL")
 
         self._close("subroutineBody")
+    
+    def compileExpression(self):
+        """
+        Temporary: do not parse expression grammar strictly; consume tokens until a stop token appears.
+        until_tokens examples: {")"}, {"]"}, {";", ","}
+        """
+
+        self._open("expression")
         
+        self.compileTerm()
+        
+        while True:
+            tok, typ = self.tok.peek()
+            if tok in self.OPS:
+                self.eat(expected_token=tok, expected_type="SYMBOL")
+                self.compileTerm()
+            else:
+                break
+        self._close("expression")
+    
+    def compileTerm(self):
+        self._open("term")
+
+        tok, typ = self.tok.peek()
+
+        # integerConstant / stringConstant
+        if typ in ("INT_CONST", "STRING_CONST"):
+            self.eat(expected_type=typ)
+
+        # keywordConstant: true/false/null/this
+        elif typ == "KEYWORD" and tok in self.KEYWORD_CONSTANTS:
+            self.eat(expected_token=tok, expected_type="KEYWORD")
+
+        # ( expression )
+        elif tok == "(":
+            self.eat("(", "SYMBOL")
+            self.compileExpression()
+            self.eat(")", "SYMBOL")
+
+        # unaryOp term
+        elif tok in self.UNARY_OPS:
+            self.eat(expected_token=tok, expected_type="SYMBOL")  # '-' or '~' is SYMBOL in your tokenizer
+            self.compileTerm()
+
+        # identifier: varName | varName[expr] | subroutineCall
+        elif typ == "IDENTIFIER":
+            # まず identifier を食う（varName or subroutineName or className/varName）
+            self.eat(expected_type="IDENTIFIER")
+
+            # 次の1トークンで分岐
+            tok2, typ2 = self.tok.peek()
+
+            # varName [ expression ]
+            if tok2 == "[":
+                self.eat("[", "SYMBOL")
+                self.compileExpression()
+                self.eat("]", "SYMBOL")
+
+            # subroutineCall: name '(' ... ')'  OR  name '.' name '(' ... ')'
+            elif tok2 in ("(", "."):
+                self._compileSubroutineCall_after_first_name()
+
+            # else: plain varName (already consumed)
+
+        else:
+            raise ValueError(f"Invalid term start: {typ}:{tok}")
+
+        self._close("term")
+            
+    def _compileSubroutineCall_after_first_name(self):
+        # ここに来た時点で、先頭の IDENTIFIER は eat 済み
+
+        tok, typ = self.tok.peek()
+
+        # subroutineName '(' expressionList ')'
+        if tok == "(":
+            self.eat("(", "SYMBOL")
+            self.compileExpressionList()
+            self.eat(")", "SYMBOL")
+            return
+
+        # (className|varName) '.' subroutineName '(' expressionList ')'
+        if tok == ".":
+            self.eat(".", "SYMBOL")
+            self.eat(expected_type="IDENTIFIER")  # subroutineName
+            self.eat("(", "SYMBOL")
+            self.compileExpressionList()
+            self.eat(")", "SYMBOL")
+            return
+
+        raise ValueError(f"Expected subroutine call, got {tok}")
+    
+    def compileExpressionList(self):
+        self._open("expressionList")
+
+        tok, typ = self.tok.peek()
+        if tok != ")":
+            self.compileExpression()
+
+            while True:
+                tok, typ = self.tok.peek()
+                if tok != ",":
+                    break
+                self.eat(",", "SYMBOL")
+                self.compileExpression()
+
+        self._close("expressionList")
+            
+    # Statements    
     def compileStatements(self):
         self._open("statements")
 
@@ -151,20 +264,15 @@ class CompilationEngine:
                 break
 
         self._close("statements")
-        
+    
     def compileReturn(self):
         self._open("returnStatement")
         self.eat("return", "KEYWORD")
 
         tok, typ = self.tok.peek()
         if tok != ";":
-            # For now: consume tokens up to ';' (later: parse a proper expression)
-            while True:
-                tok, typ = self.tok.peek()
-                if tok == ";":
-                    break
-                self.eat()
-
+            self.compileExpression()
+            
         self.eat(";", "SYMBOL")
         self._close("returnStatement")
 
@@ -172,12 +280,8 @@ class CompilationEngine:
         self._open("doStatement")
         self.eat("do", "KEYWORD")
 
-        # For now: consume tokens up to ';' (later: parse a proper subroutineCall)
-        while True:
-            tok, typ = self.tok.peek()
-            if tok == ";":
-                break
-            self.eat()
+        self.eat(expected_type="IDENTIFIER")
+        self._compileSubroutineCall_after_first_name()
 
         self.eat(";", "SYMBOL")
         self._close("doStatement")
@@ -191,23 +295,11 @@ class CompilationEngine:
         tok, typ = self.tok.peek()
         if tok == "[":
             self.eat("[", "SYMBOL")
-            # expression (for now: consume tokens up to ']')
-            while True:
-                tok, typ = self.tok.peek()
-                if tok == "]":
-                    break
-                self.eat()
+            self.compileExpression()
             self.eat("]", "SYMBOL")
 
         self.eat("=", "SYMBOL")
-
-        # expression (for now: consume tokens up to ';')
-        while True:
-            tok, typ = self.tok.peek()
-            if tok == ";":
-                break
-            self.eat()
-
+        self.compileExpression()
         self.eat(";", "SYMBOL")
         self._close("letStatement")
     
@@ -215,35 +307,32 @@ class CompilationEngine:
         self._open("whileStatement")
 
         self.eat("while", "KEYWORD")
+        
+        # (expression)
         self.eat("(", "SYMBOL")
-
-        # expression
-        self.compileExpression(until_tokens={")"})
-
+        self.compileExpression()
         self.eat(")", "SYMBOL")
+        
+        # {statements}
         self.eat("{", "SYMBOL")
-
-        # statements（再帰）
         self.compileStatements()
-
         self.eat("}", "SYMBOL")
+        
         self._close("whileStatement")
     
     def compileIf(self):
         self._open("ifStatement")
 
         self.eat("if", "KEYWORD")
+        
+        # (expression)
         self.eat("(", "SYMBOL")
-
-        # expression
-        self.compileExpression(until_tokens={")"})
-
+        self.compileExpression()
         self.eat(")", "SYMBOL")
+        
+        # {statements}
         self.eat("{", "SYMBOL")
-
-        # statements（再帰）
         self.compileStatements()
-
         self.eat("}", "SYMBOL")
 
         # optional else
@@ -255,52 +344,7 @@ class CompilationEngine:
             self.eat("}", "SYMBOL")
 
         self._close("ifStatement")
-        
-    def compileExpression(self, until_tokens=None):
-        """
-        Temporary: do not parse expression grammar strictly; consume tokens until a stop token appears.
-        until_tokens examples: {")"}, {"]"}, {";", ","}
-        """
-        if until_tokens is None:
-            until_tokens = {")"}
-
-        self._open("expression")
-        while True:
-            tok, typ = self.tok.peek()
-            if tok in until_tokens:
-                break
-            self.eat()
-        self._close("expression")
     
-    
-    
-    # main compiler entry point
-    def compileClass(self):
-        self._open("class")
-
-        self.eat(expected_token="class", expected_type="KEYWORD")
-        self.eat(expected_type="IDENTIFIER")  # className
-        self.eat(expected_token="{", expected_type="SYMBOL")
-
-        # classVarDec*
-        while True:
-            tok, typ = self.tok.peek()
-            if tok in ("static", "field"):
-                self.compileClassVarDec()   # class-level variable declarations
-            else:
-                break
-
-        # subroutineDec*
-        while True:
-            tok, typ = self.tok.peek()
-            if tok in ("constructor", "function", "method"):
-                self.compileSubroutine()    # subroutine declarations
-            else:
-                break
-
-        self.eat(expected_token="}", expected_type="SYMBOL")
-        self._close("class")
-        
     def compileVarDec(self):
         self._open("varDec")
 
@@ -343,8 +387,30 @@ class CompilationEngine:
 
         self._close("subroutineDec")
 
+    # main compiler entry point
+    def compileClass(self):
+        self._open("class")
 
-if __name__ == "__main__":
-    ce = CompilationEngine("../Square/Main.jack", "../Square/Main.xml")
-    ce.compileClass()
-    ce.close()
+        self.eat(expected_token="class", expected_type="KEYWORD")
+        self.eat(expected_type="IDENTIFIER")  # className
+        self.eat(expected_token="{", expected_type="SYMBOL")
+
+        # classVarDec*
+        while True:
+            tok, typ = self.tok.peek()
+            if tok in ("static", "field"):
+                self.compileClassVarDec()   # class-level variable declarations
+            else:
+                break
+
+        # subroutineDec*
+        while True:
+            tok, typ = self.tok.peek()
+            if tok in ("constructor", "function", "method"):
+                self.compileSubroutine()    # subroutine declarations
+            else:
+                break
+
+        self.eat(expected_token="}", expected_type="SYMBOL")
+        self._close("class")
+
