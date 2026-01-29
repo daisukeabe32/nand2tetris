@@ -38,7 +38,7 @@ def main():
 
     for jack_path in jack_files:
         out_path = output_xml_path(jack_path)
-        ce = CompilationEngine(jack_path, out_path)
+        ce = CompilationEngine_ref(jack_path, out_path)
         ce.compileClass()
         ce.close()
 
