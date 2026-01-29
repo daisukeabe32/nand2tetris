@@ -1,7 +1,7 @@
 # JackAnalyzer.py
 import os
 import sys
-from CompilationEngine_ref import CompilationEngine_ref
+from CompilationEngine import CompilationEngine
 
 
 def is_jack_file(path: str) -> bool:
@@ -38,7 +38,7 @@ def main():
 
     for jack_path in jack_files:
         out_path = output_xml_path(jack_path)
-        ce = CompilationEngine_ref(jack_path, out_path)
+        ce = CompilationEngine(jack_path, out_path)
         ce.compileClass()
         ce.close()
 

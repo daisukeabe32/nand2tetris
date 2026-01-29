@@ -1,7 +1,7 @@
 from JackTokenizer import JackTokenizer
 
 
-class CompilationEngine_ref:
+class CompilationEngine:
     OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
     UNARY_OPS = {"-", "~"}
     KEYWORD_CONSTANTS = {"true", "false", "null", "this"}
