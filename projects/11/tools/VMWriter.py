@@ -26,3 +26,12 @@ class VMWriter:
 
     def writeReturn(self):
         self.write("return")
+        
+    def writeLabel(self, label: str):
+        self.write(f"label {label}")
+
+    def writeGoto(self, label: str):
+        self.write(f"goto {label}")
+
+    def writeIf(self, label: str):
+        self.write(f"if-goto {label}")

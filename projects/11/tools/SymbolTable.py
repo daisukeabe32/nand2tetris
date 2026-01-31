@@ -46,6 +46,8 @@ class SymbolTable:
             self.sub_scope[name] = sym
         else:
             raise ValueError(f"Invalid kind: {kind}")
+        
+        print(f"Defined symbol: {name} -> {sym}")
 
     def varCount(self, kind: str) -> int:
         if kind not in self.counts:

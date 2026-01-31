@@ -1,5 +1,6 @@
 from JackTokenizer import JackTokenizer
 from VMWriter import VMWriter
+from SymbolTable import SymbolTable
 
 class CompilationEngine:
     OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
@@ -11,6 +12,7 @@ class CompilationEngine:
         self.tok = JackTokenizer(input_path)
         self.vm = VMWriter(output_path)
         self.indent = 0
+        self.st = SymbolTable()
 
         # Core idea (N2T style): keep current_token always valid by priming with advance()
         self.tok.advance()
@@ -51,8 +53,6 @@ class CompilationEngine:
 
     # big grammar units (class → subroutine → statements → expression → term)
     def compileClassVarDec(self):
-        self._open("classVarDec")
-
         self.eat(expected_type="KEYWORD")  # static | field
         self.compileType()
         self.eat(expected_type="IDENTIFIER")
@@ -62,7 +62,6 @@ class CompilationEngine:
             self.eat(expected_type="IDENTIFIER")
 
         self.eat(";", "SYMBOL")
-        self._close("classVarDec")
 
     def compileType(self):
         # Precondition: a type token is expected at this point
@@ -72,6 +71,7 @@ class CompilationEngine:
             self.eat(expected_type="IDENTIFIER")
 
     def compileSubroutine(self):
+        self.st.reset()
         sub_kind = self.tok.current_token          # constructor | function | method
         self.eat(expected_type="KEYWORD")
 
@@ -112,17 +112,24 @@ class CompilationEngine:
         
     def compileVarDec(self):
         self.eat("var", "KEYWORD")
+        
+        type_name = self.tok.current_token
         self.compileType()
+        
+        name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
+        self.st.define(name, type_name, "var")
 
         count = 1
         
         while self.tok.current_token == ",":
             self.eat(",", "SYMBOL")
+            name = self.tok.current_token
             self.eat(expected_type="IDENTIFIER")
+            self.st.define(name, type_name, "var")
             count += 1
+            
         self.eat(";", "SYMBOL")
-        
         return count
     
     def compileStatements(self):
@@ -136,21 +143,24 @@ class CompilationEngine:
             }[self.tok.current_token]()
 
     def compileLet(self):
-        self._open("letStatement")
-
         self.eat("let", "KEYWORD")
+        
+        var_name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
 
+        # TODO: array handling later (varName[expression] = expression;)
         if self.tok.current_token == "[":
-            self.eat("[", "SYMBOL")
-            self.compileExpression()
-            self.eat("]", "SYMBOL")
+            raise NotImplementedError("Array assignment not implemented yet")
 
         self.eat("=", "SYMBOL")
+        
+        # RHS: leaves a value on the top of the stack
         self.compileExpression()
+        
         self.eat(";", "SYMBOL")
-
-        self._close("letStatement")
+        
+        # Codegen: pop RHS value into the LHS variable
+        self._writePop(var_name)
 
     def compileIf(self):
         self._open("ifStatement")
@@ -188,9 +198,13 @@ class CompilationEngine:
 
     def compileDo(self):
         self.eat("do", "KEYWORD")
-        self.compileSubroutineCall()
-        self.eat(";", "SYMBOL")
         
+        name1 = self.tok.current_token
+        self.eat(expected_type="IDENTIFIER")
+        
+        self.compileSubroutineCall(name1)
+        
+        self.eat(";", "SYMBOL")
         self.vm.writePop("temp", 0)
 
     def compileReturn(self):
@@ -226,20 +240,39 @@ class CompilationEngine:
             self.vm.writePush("constant", val)
             return
 
+        elif self.tok.current_token in self.UNARY_OPS:
+            op = self.tok.current_token
+            self.eat(expected_type="SYMBOL")
+            self.compileTerm()
+            if op == "-":
+                self.vm.writeArithmetic("neg")
+            elif op == "~":
+                self.vm.writeArithmetic("not")
+            return
+        
         elif self.tok.current_token == "(":
             self.eat("(", "SYMBOL")
             self.compileExpression()
             self.eat(")", "SYMBOL")
             return
         
+        elif self.tok.current_type == "IDENTIFIER":
+            var_name = self.tok.current_token
+            self.eat(expected_type="IDENTIFIER")
+            
+            if self.tok.current_token in ("(", "."):
+                # subroutine call
+                self.compileSubroutineCall(var_name)
+                return
+            if self.tok.current_token == "[":
+                raise NotImplementedError("Array access not implemented yet")
+
+            self._writePushVar(var_name)
+            return
+        
         raise NotImplementedError(f"Term not supported yet: {self.tok.current_token}")
 
-    def compileSubroutineCall(self):
-        name1 = self.tok.current_token
-        self.eat(expected_type="IDENTIFIER")
-        
-        full_name = None
-        
+    def compileSubroutineCall(self, name1: str) -> None:
         if self.tok.current_token == ".":
             self.eat(".", "SYMBOL")
             name2 = self.tok.current_token
@@ -273,3 +306,41 @@ class CompilationEngine:
                 self.compileExpression()
                 n += 1
         return n
+    
+    def _writePop(self, var_name: str) -> None:
+        kind = self.st.kindOf(var_name)
+        index = self.st.indexOf(var_name)
+        
+        if kind is None or index is None:
+            raise ValueError(f"Undefined variable: {var_name}")
+        
+        segment = {
+            "static": "static",
+            "field": "this",
+            "arg": "argument",
+            "var": "local"
+        }.get(kind)
+        
+        if segment is None:
+            raise ValueError(f"Unknown kind for variable {var_name}: {kind}")
+        
+        self.vm.writePop(segment, index)
+        
+    def _writePushVar(self, name: str) -> None:
+        kind = self.st.kindOf(name)
+        index = self.st.indexOf(name)
+        
+        if kind is None or index is None:
+            raise ValueError(f"Undefined variable: {name}")
+        
+        segment = {
+            "static": "static",
+            "field": "this",
+            "arg": "argument",
+            "var": "local"
+        }.get(kind)
+        
+        if segment is None:
+            raise ValueError(f"Unknown kind for variable {name}: {kind}")
+        
+        self.vm.writePush(segment, index)
