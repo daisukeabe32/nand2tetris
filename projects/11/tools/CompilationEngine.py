@@ -36,8 +36,6 @@ class CompilationEngine:
 
     # main public API (entry point)
     def compileClass(self):
-        self._open("class")
-
         self.eat("class", "KEYWORD")
         self.class_name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
@@ -50,7 +48,6 @@ class CompilationEngine:
             self.compileSubroutine()
 
         self.eat("}", "SYMBOL")
-        self._close("class")
 
     # big grammar units (class → subroutine → statements → expression → term)
     def compileClassVarDec(self):
@@ -75,9 +72,6 @@ class CompilationEngine:
             self.eat(expected_type="IDENTIFIER")
 
     def compileSubroutine(self):
-
-        self._open("subroutineDec")
-
         sub_kind = self.tok.current_token          # constructor | function | method
         self.eat(expected_type="KEYWORD")
 
@@ -93,13 +87,11 @@ class CompilationEngine:
         self.compileParameterList()
         self.eat(")", "SYMBOL")
 
+        self.eat("{", "SYMBOL")
         self.compileSubroutineBody(sub_kind, sub_name)
-                
-        self._close("subroutineDec")
+        self.eat("}", "SYMBOL")
 
     def compileParameterList(self):
-        self._open("parameterList")
-
         if self.tok.current_token != ")":
             self.compileType()
             self.eat(expected_type="IDENTIFIER")
@@ -109,49 +101,31 @@ class CompilationEngine:
                 self.compileType()
                 self.eat(expected_type="IDENTIFIER")
 
-        self._close("parameterList")
-
     def compileSubroutineBody(self, sub_kind: str, sub_name: str):
-        self.eat("{", "SYMBOL")
-
         n_locals = 0
         while self.tok.current_token == "var":
-            n_locals += self._consumeVarDecAndCount()
+            n_locals += self.compileVarDec()
 
         full_name = f"{self.class_name}.{sub_name}"
         self.vm.writeFunction(full_name, n_locals)
         self.compileStatements()
-        self.eat("}", "SYMBOL")
         
-    def _consumeVarDecAndCount(self) -> int:
+    def compileVarDec(self):
         self.eat("var", "KEYWORD")
         self.compileType()
         self.eat(expected_type="IDENTIFIER")
+
         count = 1
+        
         while self.tok.current_token == ",":
             self.eat(",", "SYMBOL")
             self.eat(expected_type="IDENTIFIER")
             count += 1
         self.eat(";", "SYMBOL")
+        
         return count
-
-    def compileVarDec(self):
-        self._open("varDec")
-
-        self.eat("var", "KEYWORD")
-        self.compileType()
-        self.eat(expected_type="IDENTIFIER")
-
-        while self.tok.current_token == ",":
-            self.eat(",", "SYMBOL")
-            self.eat(expected_type="IDENTIFIER")
-
-        self.eat(";", "SYMBOL")
-        self._close("varDec")
-
+    
     def compileStatements(self):
-        self._open("statements")
-
         while self.tok.current_token in ("let", "if", "while", "do", "return"):
             {
                 "let": self.compileLet,
@@ -160,8 +134,6 @@ class CompilationEngine:
                 "do": self.compileDo,
                 "return": self.compileReturn,
             }[self.tok.current_token]()
-
-        self._close("statements")
 
     def compileLet(self):
         self._open("letStatement")
