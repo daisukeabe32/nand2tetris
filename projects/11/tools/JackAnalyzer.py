@@ -24,9 +24,13 @@ def collect_jack_files(input_path: str) -> list[str]:
 
     raise ValueError(f"Input must be a .jack file or a directory containing .jack files: {input_path}")
 
-def output_xml_path(jack_path: str) -> str:
+# def output_xml_path(jack_path: str) -> str:
+#     base, _ = os.path.splitext(jack_path)
+#     return base + ".xml"
+
+def output_vm_path(jack_path: str) -> str:
     base, _ = os.path.splitext(jack_path)
-    return base + ".xml"
+    return base + ".vm"
 
 def main():
     if len(sys.argv) != 2:
@@ -37,7 +41,7 @@ def main():
     jack_files = collect_jack_files(input_path)
 
     for jack_path in jack_files:
-        out_path = output_xml_path(jack_path)
+        out_path = output_vm_path(jack_path)
         ce = CompilationEngine(jack_path, out_path)
         ce.compileClass()
         ce.close()
