@@ -1,44 +1,25 @@
 from JackTokenizer import JackTokenizer
+from VMWriter import VMWriter
 
 class CompilationEngine:
     OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
     UNARY_OPS = {"-", "~"}
     KEYWORD_CONSTANTS = {"true", "false", "null", "this"}
 
-    # 2) lifecycle
+    # lifecycle
     def __init__(self, input_path: str, output_path: str):
         self.tok = JackTokenizer(input_path)
-        self.out = open(output_path, "w", encoding="utf-8")
+        self.vm = VMWriter(output_path)
         self.indent = 0
 
         # Core idea (N2T style): keep current_token always valid by priming with advance()
         self.tok.advance()
 
     def close(self):
-        self.out.close()
+        self.vm.close()
 
-    # 3) low-level common utilities (XML helpers + token writer)
-    def _w(self, line: str):
-        self.out.write(" " * self.indent + line + "\n")
-
-    def _open(self, tag: str):
-        # self._w(f"<{tag}>")
-        self.indent += 2
-
-    def _close(self, tag: str):
-        self.indent -= 2
-        # self._w(f"</{tag}>")
-
-    def _write_current_token(self):
-        tok = self.tok.current_token
-        typ = self.tok.current_type
-        tag = JackTokenizer.TYPE_TO_TAG[typ]
-
-        if typ == "SYMBOL":
-            tok = JackTokenizer.escape_xml(tok)
-
-        self._w(f"<{tag}> {tok} </{tag}>")
-
+    # low-level common utilities from project 10  
+    
     # ---------- eat（assert-like） ----------
     def eat(self, expected_token=None, expected_type=None):
         if expected_token is not None and self.tok.current_token != expected_token:
@@ -49,13 +30,11 @@ class CompilationEngine:
             raise SyntaxError(
                 f"expected type '{expected_type}', got '{self.tok.current_type}'"
             )
-
-        # self._write_current_token()
         
         if self.tok.has_more_tokens():
             self.tok.advance()
 
-    # 5) main public API (entry point)
+    # main public API (entry point)
     def compileClass(self):
         self._open("class")
 
@@ -73,7 +52,7 @@ class CompilationEngine:
         self.eat("}", "SYMBOL")
         self._close("class")
 
-    # 6) big grammar units (class → subroutine → statements → expression → term)
+    # big grammar units (class → subroutine → statements → expression → term)
     def compileClassVarDec(self):
         self._open("classVarDec")
 
@@ -114,31 +93,8 @@ class CompilationEngine:
         self.compileParameterList()
         self.eat(")", "SYMBOL")
 
-        # --- Stage2 (temporary fixed output) ---
-        if sub_kind == "function" and sub_name == "main":
-            self.out.write(f"function {self.class_name}.main 0\n")
-            self.out.write("push constant 0\n")
-            self.out.write("return\n")
-
-        # TEMP: skip body for now!
-        def _skipSubroutineBody_only_parse():
-            # current_token supposed to be '{' 
-            self.eat("{", "SYMBOL")
-
-            depth = 1
-            while depth > 0:
-                tok = self.tok.current_token
-
-                if tok == "{":
-                    depth += 1
-                elif tok == "}":
-                    depth -= 1
-
-                # consume 1 token (no expectation)
-                self.eat()
+        self.compileSubroutineBody(sub_kind, sub_name)
                 
-        _skipSubroutineBody_only_parse()
-        
         self._close("subroutineDec")
 
     def compileParameterList(self):
@@ -155,18 +111,29 @@ class CompilationEngine:
 
         self._close("parameterList")
 
-    def compileSubroutineBody(self):
-        self._open("subroutineBody")
-
+    def compileSubroutineBody(self, sub_kind: str, sub_name: str):
         self.eat("{", "SYMBOL")
 
+        n_locals = 0
         while self.tok.current_token == "var":
-            self.compileVarDec()
+            n_locals += self._consumeVarDecAndCount()
 
+        full_name = f"{self.class_name}.{sub_name}"
+        self.vm.writeFunction(full_name, n_locals)
         self.compileStatements()
         self.eat("}", "SYMBOL")
-
-        self._close("subroutineBody")
+        
+    def _consumeVarDecAndCount(self) -> int:
+        self.eat("var", "KEYWORD")
+        self.compileType()
+        self.eat(expected_type="IDENTIFIER")
+        count = 1
+        while self.tok.current_token == ",":
+            self.eat(",", "SYMBOL")
+            self.eat(expected_type="IDENTIFIER")
+            count += 1
+        self.eat(";", "SYMBOL")
+        return count
 
     def compileVarDec(self):
         self._open("varDec")
@@ -248,87 +215,89 @@ class CompilationEngine:
         self._close("whileStatement")
 
     def compileDo(self):
-        self._open("doStatement")
-
         self.eat("do", "KEYWORD")
         self.compileSubroutineCall()
         self.eat(";", "SYMBOL")
-
-        self._close("doStatement")
+        
+        self.vm.writePop("temp", 0)
 
     def compileReturn(self):
-        self._open("returnStatement")
-
         self.eat("return", "KEYWORD")
 
         if self.tok.current_token != ";":
             self.compileExpression()
+        else:
+            self.vm.writePush("constant", 0)
 
         self.eat(";", "SYMBOL")
-        self._close("returnStatement")
+        self.vm.writeReturn()
 
     def compileExpression(self):
-        self._open("expression")
-
         self.compileTerm()
 
         while self.tok.current_token in self.OPS:
+            op = self.tok.current_token
             self.eat(expected_type="SYMBOL")
             self.compileTerm()
-
-        self._close("expression")
+            
+            if op == "+":
+                self.vm.writeArithmetic("add")
+            elif op == "*":
+                self.vm.writeCall("Math.multiply", 2)
+            else:
+                raise NotImplementedError(f"Op not supported yet: {op}")
 
     def compileTerm(self):
-        self._open("term")
-
-        if self.tok.current_type in ("INT_CONST", "STRING_CONST"):
-            self.eat(expected_type=self.tok.current_type)
-
-        elif self.tok.current_type == "KEYWORD":
-            self.eat(expected_type="KEYWORD")
+        if self.tok.current_type == "INT_CONST":
+            val = int(self.tok.current_token)
+            self.eat(expected_type="INT_CONST")
+            self.vm.writePush("constant", val)
+            return
 
         elif self.tok.current_token == "(":
             self.eat("(", "SYMBOL")
             self.compileExpression()
             self.eat(")", "SYMBOL")
-
-        elif self.tok.current_token in self.UNARY_OPS:
-            self.eat(expected_type="SYMBOL")
-            self.compileTerm()
-
-        else:
-            self.eat(expected_type="IDENTIFIER")
-
-            if self.tok.current_token == "[":
-                self.eat("[", "SYMBOL")
-                self.compileExpression()
-                self.eat("]", "SYMBOL")
-
-            elif self.tok.current_token in ("(", "."):
-                self.compileSubroutineCallRest()
-
-        self._close("term")
+            return
+        
+        raise NotImplementedError(f"Term not supported yet: {self.tok.current_token}")
 
     def compileSubroutineCall(self):
+        name1 = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
-        self.compileSubroutineCallRest()
-
-    def compileSubroutineCallRest(self):
+        
+        full_name = None
+        
         if self.tok.current_token == ".":
             self.eat(".", "SYMBOL")
+            name2 = self.tok.current_token
             self.eat(expected_type="IDENTIFIER")
-
+            full_name = f"{name1}.{name2}"
+        else:
+            full_name = f"{self.class_name}.{name1}"
+            
         self.eat("(", "SYMBOL")
-        self.compileExpressionList()
+        n_args = self.compileExpressionList()
         self.eat(")", "SYMBOL")
+        
+        self.vm.writeCall(full_name, n_args)
+
+    # def compileSubroutineCallRest(self):
+    #     if self.tok.current_token == ".":
+    #         self.eat(".", "SYMBOL")
+    #         self.eat(expected_type="IDENTIFIER")
+
+    #     self.eat("(", "SYMBOL")
+    #     self.compileExpressionList()
+    #     self.eat(")", "SYMBOL")
 
     def compileExpressionList(self):
-        self._open("expressionList")
-
+        n = 0
         if self.tok.current_token != ")":
             self.compileExpression()
+            n = 1
             while self.tok.current_token == ",":
                 self.eat(",", "SYMBOL")
                 self.compileExpression()
-
-        self._close("expressionList")
+                n += 1
+        return n
