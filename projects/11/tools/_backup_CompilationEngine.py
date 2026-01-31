@@ -1,11 +1,11 @@
 from JackTokenizer import JackTokenizer
 
-
 class CompilationEngine:
     OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
     UNARY_OPS = {"-", "~"}
     KEYWORD_CONSTANTS = {"true", "false", "null", "this"}
 
+    # 2) lifecycle
     def __init__(self, input_path: str, output_path: str):
         self.tok = JackTokenizer(input_path)
         self.out = open(output_path, "w", encoding="utf-8")
@@ -17,17 +17,17 @@ class CompilationEngine:
     def close(self):
         self.out.close()
 
-    # ---------- XML helpers ----------
+    # 3) low-level common utilities (XML helpers + token writer)
     def _w(self, line: str):
         self.out.write(" " * self.indent + line + "\n")
 
     def _open(self, tag: str):
-        self._w(f"<{tag}>")
+        # self._w(f"<{tag}>")
         self.indent += 2
 
     def _close(self, tag: str):
         self.indent -= 2
-        self._w(f"</{tag}>")
+        # self._w(f"</{tag}>")
 
     def _write_current_token(self):
         tok = self.tok.current_token
@@ -50,17 +50,17 @@ class CompilationEngine:
                 f"expected type '{expected_type}', got '{self.tok.current_type}'"
             )
 
-        self._write_current_token()
+        # self._write_current_token()
         
         if self.tok.has_more_tokens():
             self.tok.advance()
 
-    # ---------- Grammar ----------
-
+    # 5) main public API (entry point)
     def compileClass(self):
         self._open("class")
 
         self.eat("class", "KEYWORD")
+        self.class_name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
         self.eat("{", "SYMBOL")
 
@@ -73,6 +73,7 @@ class CompilationEngine:
         self.eat("}", "SYMBOL")
         self._close("class")
 
+    # 6) big grammar units (class → subroutine → statements → expression → term)
     def compileClassVarDec(self):
         self._open("classVarDec")
 
@@ -95,22 +96,49 @@ class CompilationEngine:
             self.eat(expected_type="IDENTIFIER")
 
     def compileSubroutine(self):
+
         self._open("subroutineDec")
 
-        self.eat(expected_type="KEYWORD")  # constructor | function | method
+        sub_kind = self.tok.current_token          # constructor | function | method
+        self.eat(expected_type="KEYWORD")
 
         if self.tok.current_token == "void":
             self.eat("void", "KEYWORD")
         else:
             self.compileType()
 
+        sub_name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
+
         self.eat("(", "SYMBOL")
         self.compileParameterList()
         self.eat(")", "SYMBOL")
 
-        self.compileSubroutineBody()
+        # --- Stage2 (temporary fixed output) ---
+        if sub_kind == "function" and sub_name == "main":
+            self.out.write(f"function {self.class_name}.main 0\n")
+            self.out.write("push constant 0\n")
+            self.out.write("return\n")
 
+        # TEMP: skip body for now!
+        def _skipSubroutineBody_only_parse():
+            # current_token supposed to be '{' 
+            self.eat("{", "SYMBOL")
+
+            depth = 1
+            while depth > 0:
+                tok = self.tok.current_token
+
+                if tok == "{":
+                    depth += 1
+                elif tok == "}":
+                    depth -= 1
+
+                # consume 1 token (no expectation)
+                self.eat()
+                
+        _skipSubroutineBody_only_parse()
+        
         self._close("subroutineDec")
 
     def compileParameterList(self):

@@ -1,5 +1,4 @@
 from JackTokenizer import JackTokenizer
-from VMWriter import VMWriter
 
 class CompilationEngine:
     OPS = {"+", "-", "*", "/", "&", "|", "<", ">", "="}
@@ -9,18 +8,18 @@ class CompilationEngine:
     # 2) lifecycle
     def __init__(self, input_path: str, output_path: str):
         self.tok = JackTokenizer(input_path)
-        self.vm = VMWriter(output_path)
+        self.out = open(output_path, "w", encoding="utf-8")
         self.indent = 0
 
         # Core idea (N2T style): keep current_token always valid by priming with advance()
         self.tok.advance()
 
     def close(self):
-        self.vm.close()
+        self.out.close()
 
     # 3) low-level common utilities (XML helpers + token writer)
     def _w(self, line: str):
-        self.vm.write(" " * self.indent + line + "\n")
+        self.out.write(" " * self.indent + line + "\n")
 
     def _open(self, tag: str):
         # self._w(f"<{tag}>")
@@ -117,9 +116,9 @@ class CompilationEngine:
 
         # --- Stage2 (temporary fixed output) ---
         if sub_kind == "function" and sub_name == "main":
-            self.vm.writeFunction(f"{self.class_name}.main", 0)
-            self.vm.writePush("constant", 0)
-            self.vm.writeReturn()
+            self.out.write(f"function {self.class_name}.main 0\n")
+            self.out.write("push constant 0\n")
+            self.out.write("return\n")
 
         # TEMP: skip body for now!
         def _skipSubroutineBody_only_parse():
