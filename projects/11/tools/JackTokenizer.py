@@ -51,25 +51,7 @@ class JackTokenizer:
     def has_more_tokens(self) -> bool:
         self._skip_ignorable()
         return self.pos < len(self.source)
-    
-    def peek(self) -> tuple:
-        saved_pos = self.pos
-        saved_token = self.current_token
-        saved_type = self.current_type
 
-        try:
-            tok = self.advance()
-            typ = self.current_type
-        except StopIteration:
-            tok = None
-            typ = None
-
-        self.pos = saved_pos
-        self.current_token = saved_token
-        self.current_type = saved_type
-
-        return tok, typ            
-    
     def advance(self) -> str:
         self._skip_ignorable()
         if self.pos >= len(self.source):
@@ -114,30 +96,28 @@ class JackTokenizer:
         else:
             self.current_type = "IDENTIFIER"
         return self.current_token
-            
+
     def token_type(self) -> str:
         return self.current_type
-    
-    @staticmethod
-    def escape_xml(s: str) -> str:
-        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    
-    @staticmethod
-    def write_tokens_xml(input_path: str, output_path: str) -> None:
-        t = JackTokenizer(input_path)
-        with open(output_path, "w", encoding="utf-8") as out:
-            out.write("<tokens>\n")
-            while t.has_more_tokens():
-                tok = t.advance()
-                typ = t.token_type()
-                tag = JackTokenizer.TYPE_TO_TAG[typ]
-                
-                if typ == "SYMBOL":
-                    tok = JackTokenizer.escape_xml(tok)
-                    
-                out.write(f"  <{tag}> {tok} </{tag}>\n")
-            out.write("</tokens>\n")
-                
+
+    def peek(self) -> tuple:
+        saved_pos = self.pos
+        saved_token = self.current_token
+        saved_type = self.current_type
+
+        try:
+            tok = self.advance()
+            typ = self.current_type
+        except StopIteration:
+            tok = None
+            typ = None
+
+        self.pos = saved_pos
+        self.current_token = saved_token
+        self.current_type = saved_type
+
+        return tok, typ            
+
     def keyWord(self) -> str:
         if self.current_type != "KEYWORD":
             raise ValueError("Current token is not a KEYWORD")
@@ -162,6 +142,26 @@ class JackTokenizer:
         if self.current_type != "STRING_CONST":
             raise ValueError("Current token is not a STRING_CONST")
         return self.current_token
+    
+    @staticmethod
+    def escape_xml(s: str) -> str:
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    
+    @staticmethod
+    def write_tokens_xml(input_path: str, output_path: str) -> None:
+        t = JackTokenizer(input_path)
+        with open(output_path, "w", encoding="utf-8") as out:
+            out.write("<tokens>\n")
+            while t.has_more_tokens():
+                tok = t.advance()
+                typ = t.token_type()
+                tag = JackTokenizer.TYPE_TO_TAG[typ]
+                
+                if typ == "SYMBOL":
+                    tok = JackTokenizer.escape_xml(tok)
+                    
+                out.write(f"  <{tag}> {tok} </{tag}>\n")
+            out.write("</tokens>\n")
                 
 if __name__ == "__main__":
     JackTokenizer.write_tokens_xml("../Square/Main.jack", "../Square/MainT.xml")
