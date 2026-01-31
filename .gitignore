@@ -12,6 +12,7 @@ __pycache__/
 *.xml
 *T.xml
 *.vm
+*.jack
 
 # Nand2Tetris tools runtime artifacts
 tools/bin/*.dat
