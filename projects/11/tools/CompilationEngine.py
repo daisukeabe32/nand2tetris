@@ -92,14 +92,22 @@ class CompilationEngine:
         self.eat("}", "SYMBOL")
 
     def compileParameterList(self):
-        if self.tok.current_token != ")":
+        if self.tok.current_token == ")":
+            return
+        
+        while True:
+            type_name = self.tok.current_token
             self.compileType()
+            
+            name = self.tok.current_token            
             self.eat(expected_type="IDENTIFIER")
+            
+            self.st.define(name, type_name, "arg")
 
-            while self.tok.current_token == ",":
-                self.eat(",", "SYMBOL")
-                self.compileType()
-                self.eat(expected_type="IDENTIFIER")
+            if self.tok.current_token != ",":
+                break
+            self.eat(",", "SYMBOL")
+
 
     def compileSubroutineBody(self, sub_kind: str, sub_name: str):
         n_locals = 0
