@@ -60,14 +60,22 @@ class CompilationEngine:
 
     # big grammar units (class → subroutine → statements → expression → term)
     def compileClassVarDec(self):
+        kind = self.tok.current_token   
         self.eat(expected_type="KEYWORD")  # static | field
+        
+        type_name = self.tok.current_token
         self.compileType()
+        
+        name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
+        self.st.define(name, type_name, kind)
 
         while self.tok.current_token == ",":
             self.eat(",", "SYMBOL")
+            name = self.tok.current_token
             self.eat(expected_type="IDENTIFIER")
-
+            self.st.define(name, type_name, kind)  
+            
         self.eat(";", "SYMBOL")
 
     def compileType(self):
