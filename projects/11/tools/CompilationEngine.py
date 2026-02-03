@@ -395,18 +395,18 @@ class CompilationEngine:
             name2 = self.tok.current_token
             self.eat(expected_type="IDENTIFIER")
 
-            # name1 が変数なら method
+            # method 
             if self.st.kindOf(name1) is not None:
                 seg, idx = self._var_segment_index(name1)
                 self.vm.writePush(seg, idx)   # objectRef
                 full_name = f"{self.st.typeOf(name1)}.{name2}"
                 n_args = 1
+            # function / constructor
             else:
-                # Class.function()
                 full_name = f"{name1}.{name2}"
 
+        # method call without class name(without "this")
         else:
-            # ★ここが暗黙 this
             self.vm.writePush("pointer", 0)
             full_name = f"{self.class_name}.{name1}"
             n_args = 1
