@@ -181,18 +181,37 @@ class CompilationEngine:
         var_name = self.tok.current_token
         self.eat(expected_type="IDENTIFIER")
 
-        # TODO: array handling later (varName[expression] = expression;)
         if self.tok.current_token == "[":
-            raise NotImplementedError("Array assignment not implemented yet")
+            # 1) push base address of a
+            self._writePushVar(var_name)
 
+            # 2) compile index expression i
+            self.eat("[", "SYMBOL")
+            self.compileExpression()          # pushes i
+            self.eat("]", "SYMBOL")
+
+            # 3) address = base + i
+            self.vm.writeArithmetic("add")    # stack: ... address
+
+            # 4) '='
+            self.eat("=", "SYMBOL")
+
+            # 5) compile RHS expr (value)
+            self.compileExpression()          # stack: ... address value
+
+            # 6) ';'
+            self.eat(";", "SYMBOL")
+
+            # 7) store value into *(address)
+            self.vm.writePop("temp", 0)       # temp0 = value, stack: ... address
+            self.vm.writePop("pointer", 1)    # THAT = address
+            self.vm.writePush("temp", 0)      # stack: ... value
+            self.vm.writePop("that", 0)       # *THAT = value
+            return
+        
         self.eat("=", "SYMBOL")
-        
-        # RHS: leaves a value on the top of the stack
-        self.compileExpression()
-        
+        self.compileExpression()        
         self.eat(";", "SYMBOL")
-        
-        # Codegen: pop RHS value into the LHS variable
         self._writePopVar(var_name)
 
     def compileIf(self):
@@ -331,7 +350,14 @@ class CompilationEngine:
                 self.compileSubroutineCall(var_name)
                 return
             if self.tok.current_token == "[":
-                raise NotImplementedError("Array access not implemented yet")
+                self._writePushVar(var_name)
+                self.eat("[", "SYMBOL")
+                self.compileExpression()
+                self.eat("]", "SYMBOL")
+                self.vm.writeArithmetic("add")
+                self.vm.writePop("pointer", 1)  # THAT = base + offset
+                self.vm.writePush("that", 0)    # push *THAT
+                return
 
             self._writePushVar(var_name)
             return
@@ -346,6 +372,17 @@ class CompilationEngine:
                 self.vm.writePush("constant", 0)
             elif keyword == "this":
                 self.vm.writePush("pointer", 0)
+            return
+        
+        elif self.tok.current_type == "STRING_CONST":
+            string_val = self.tok.current_token
+            self.eat(expected_type="STRING_CONST")
+            str_len = len(string_val)
+            self.vm.writePush("constant", str_len)
+            self.vm.writeCall("String.new", 1)
+            for ch in string_val:
+                self.vm.writePush("constant", ord(ch))
+                self.vm.writeCall("String.appendChar", 2)
             return
         
         raise NotImplementedError(f"Term not supported yet: {self.tok.current_token}")
