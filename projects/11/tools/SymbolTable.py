@@ -69,3 +69,8 @@ class SymbolTable:
     def indexOf(self, name: str) -> Optional[int]:
         sym = self._lookup(name)
         return sym.index if sym else None
+    
+    def varCount(self, kind: str) -> int:
+        if kind not in self.counts:
+            raise ValueError(f"Unknown kind: {kind}")
+        return self.counts[kind]

@@ -131,6 +131,16 @@ class CompilationEngine:
 
         full_name = f"{self.class_name}.{sub_name}"
         self.vm.writeFunction(full_name, n_locals)
+        
+        if sub_kind == "constructor":
+            n_fields = self.st.varCount("field")
+            self.vm.writePush("constant", n_fields)
+            self.vm.writeCall("Memory.alloc", 1)
+            self.vm.writePop("pointer", 0)  # this = base address
+        elif sub_kind == "method":
+            self.vm.writePush("argument", 0)
+            self.vm.writePop("pointer", 0)  # this = argument 0
+            
         self.compileStatements()
         
     def compileVarDec(self):
@@ -340,29 +350,34 @@ class CompilationEngine:
         
         raise NotImplementedError(f"Term not supported yet: {self.tok.current_token}")
 
-    def compileSubroutineCall(self, name1: str) -> None:
+    def compileSubroutineCall(self, name1: str):
+        n_args = 0
+
         if self.tok.current_token == ".":
-            self.eat(".", "SYMBOL")
+            self.eat(".")
             name2 = self.tok.current_token
             self.eat(expected_type="IDENTIFIER")
-            full_name = f"{name1}.{name2}"
+
+            # name1 が変数なら method
+            if self.st.kindOf(name1) is not None:
+                seg, idx = self._var_segment_index(name1)
+                self.vm.writePush(seg, idx)   # objectRef
+                full_name = f"{self.st.typeOf(name1)}.{name2}"
+                n_args = 1
+            else:
+                # Class.function()
+                full_name = f"{name1}.{name2}"
+
         else:
+            # ★ここが暗黙 this
+            self.vm.writePush("pointer", 0)
             full_name = f"{self.class_name}.{name1}"
-            
-        self.eat("(", "SYMBOL")
-        n_args = self.compileExpressionList()
-        self.eat(")", "SYMBOL")
-        
+            n_args = 1
+
+        self.eat("(")
+        n_args += self.compileExpressionList()
+        self.eat(")")
         self.vm.writeCall(full_name, n_args)
-
-    # def compileSubroutineCallRest(self):
-    #     if self.tok.current_token == ".":
-    #         self.eat(".", "SYMBOL")
-    #         self.eat(expected_type="IDENTIFIER")
-
-    #     self.eat("(", "SYMBOL")
-    #     self.compileExpressionList()
-    #     self.eat(")", "SYMBOL")
 
     def compileExpressionList(self):
         n = 0
