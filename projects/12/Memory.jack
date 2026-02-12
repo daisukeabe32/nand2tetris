@@ -1,33 +1,187 @@
+// projects/12/Memory.jack
 // This file is part of www.nand2tetris.org
 // and the book "The Elements of Computing Systems"
 // by Nisan and Schocken, MIT Press.
 // File name: projects/12/Memory.jack
+
 /**
  * This library provides two services: direct access to the computer's main
- * memory (RAM), and allocation and recycling of memory blocks. The Hack RAM
- * consists of 32,768 words, each holding a 16-bit binary number.
- */ 
+ * memory (RAM), and allocation and recycling of memory blocks.
+ */
 class Memory {
+
+    // free list head (address of first free block)
+    static int freeList;
+
+    // heap start address (conventionally 2048)
+    static int heapStart;
+
+    /** internal: RAM[address] -> int */
+    function int read(int address) {
+        var Array a;
+        let a = address;     // treat raw address as Array base
+        return a[0];
+    }
+
+    /** internal: RAM[address] = value */
+    function void write(int address, int value) {
+        var Array a;
+        let a = address;
+        let a[0] = value;
+        return;
+    }
 
     /** Initializes the class. */
     function void init() {
+        // heap starts at 2048
+        let heapStart = 2048;
+        let freeList = heapStart;
+
+        // One big free block:
+        // header layout: [size, next]
+        // size = (32767 - heapStart + 1)
+        do Memory.write(freeList, (32767 - heapStart) + 1);
+        do Memory.write(freeList + 1, 0);   // next = null
+        return;
     }
 
     /** Returns the RAM value at the given address. */
     function int peek(int address) {
+        return Memory.read(address);
     }
 
     /** Sets the RAM value at the given address to the given value. */
     function void poke(int address, int value) {
+        do Memory.write(address, value);
+        return;
     }
 
     /** Finds an available RAM block of the given size and returns
      *  a reference to its base address. */
     function int alloc(int size) {
+        var int need;      // requested payload + header(2)
+        var int prev;      // previous free block header address (0 = none)
+        var int curr;      // current free block header address
+        var int currSize;  // size of curr block
+        var int next;      // next pointer from curr
+        var int newFree;   // header address of remainder block after split
+
+        let need = size + 2;
+
+        let prev = 0;
+        let curr = freeList;
+
+        // while (curr != 0)
+        while (~(curr = 0)) {
+
+            let currSize = Memory.read(curr);
+            let next = Memory.read(curr + 1);
+
+            // if (currSize >= need)
+            if (~(currSize < need)) {
+
+                // exact fit?
+                if (currSize = need) {
+
+                    // remove curr from free list
+                    if (prev = 0) {
+                        let freeList = next;
+                    } else {
+                        do Memory.write(prev + 1, next);
+                    }
+
+                } else {
+                    // split:
+                    // allocated block stays at curr
+                    // remainder becomes new free block at curr + need
+                    let newFree = curr + need;
+
+                    do Memory.write(newFree, currSize - need);
+                    do Memory.write(newFree + 1, next);
+
+                    if (prev = 0) {
+                        let freeList = newFree;
+                    } else {
+                        do Memory.write(prev + 1, newFree);
+                    }
+                }
+
+                // write allocated header: store total size for deAlloc
+                do Memory.write(curr, need);
+
+                // return payload base (skip 2-word header)
+                return curr + 2;
+            }
+
+            // advance
+            let prev = curr;
+            let curr = next;
+        }
+
+        // out of memory
+        do Sys.error(6);
+        return 0;
     }
 
     /** De-allocates the given object (cast as an array) by making
      *  it available for future allocations. */
     function void deAlloc(Array o) {
-    }    
+        var int base;      // header address = o - 2
+        var int size;      // total block size (including header)
+        var int prev;      // previous free block header address
+        var int curr;      // current free block header address
+        var int next;      // next pointer (curr)
+        var int prevSize;  // size of prev block
+        var int currSize;  // size of next block
+
+        let base = o - 2;
+        let size = Memory.read(base);
+
+        // find insertion point in address-sorted free list
+        let prev = 0;
+        let curr = freeList;
+
+        // while (curr != 0 && curr < base)
+        while ((~(curr = 0)) & (curr < base)) {
+            let prev = curr;
+            let curr = Memory.read(curr + 1);
+        }
+
+        // insert base between prev and curr
+        do Memory.write(base, size);
+        do Memory.write(base + 1, curr);
+
+        if (prev = 0) {
+            let freeList = base;
+        } else {
+            do Memory.write(prev + 1, base);
+        }
+
+        // coalesce with next (curr)
+        let next = curr;
+        if (~(next = 0)) {
+            let currSize = Memory.read(next);
+
+            // if base + size == next
+            if ((base + Memory.read(base)) = next) {
+                // merge base + next
+                do Memory.write(base, Memory.read(base) + currSize);
+                do Memory.write(base + 1, Memory.read(next + 1));
+            }
+        }
+
+        // coalesce with prev
+        if (~(prev = 0)) {
+            let prevSize = Memory.read(prev);
+
+            // if prev + prevSize == base
+            if ((prev + prevSize) = base) {
+                // merge prev + base
+                do Memory.write(prev, prevSize + Memory.read(base));
+                do Memory.write(prev + 1, Memory.read(base + 1));
+            }
+        }
+
+        return;
+    }
 }

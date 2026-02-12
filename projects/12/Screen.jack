@@ -1,42 +1,218 @@
-// This file is part of www.nand2tetris.org
-// and the book "The Elements of Computing Systems"
-// by Nisan and Schocken, MIT Press.
 // File name: projects/12/Screen.jack
-/**
- * A library of functions for displaying graphics on the screen.
- * The Hack physical screen consists of 512 rows (indexed 0..511, top to bottom)
- * of 256 pixels each (indexed 0..255, left to right). The top left pixel on 
- * the screen is indexed (0,0).
- */
 class Screen {
 
-    /** Initializes the Screen. */
+    static int SCREEN_BASE;   // 16384
+    static int SCREEN_END;    // 24575 (inclusive)
+    static boolean color;     // true=black, false=white
+
     function void init() {
+        let SCREEN_BASE = 16384;
+        let SCREEN_END  = 24575;
+        let color = true;
+        do Screen.clearScreen();
+        return;
     }
 
-    /** Erases the entire screen. */
     function void clearScreen() {
+        var int addr;
+        let addr = SCREEN_BASE;
+
+        // while (addr <= SCREEN_END)  <=>  while (~(SCREEN_END < addr))
+        while (~(SCREEN_END < addr)) {
+            do Memory.poke(addr, 0);
+            let addr = addr + 1;
+        }
+        return;
     }
 
-    /** Sets the current color, to be used for all subsequent drawXXX commands.
-     *  Black is represented by true, white by false. */
     function void setColor(boolean b) {
+        let color = b;
+        return;
     }
 
-    /** Draws the (x,y) pixel, using the current color. */
+    // --- helpers ---
+
+    function int mask(int k) {
+        var int m;
+        let m = 1;
+        while (k > 0) {
+            let m = m + m;
+            let k = k - 1;
+        }
+        return m;
+    }
+
+    // y*32 by doubling 5 times (no *)
+    function int rowOffset(int y) {
+        var int acc;
+        var int i;
+        let acc = y;
+        let i = 0;
+        while (i < 5) {
+            let acc = acc + acc;
+            let i = i + 1;
+        }
+        return acc;
+    }
+
+    function int div16(int x) {
+        var int q;
+        let q = 0;
+        while (~(x < 16)) {   // while (x >= 16)
+            let x = x - 16;
+            let q = q + 1;
+        }
+        return q;
+    }
+
+    function int mod16(int x) {
+        while (~(x < 16)) {   // while (x >= 16)
+            let x = x - 16;
+        }
+        return x;
+    }
+
     function void drawPixel(int x, int y) {
+        var int addr;
+        var int word;
+        var int bit;
+        var int m;
+
+        // bounds: if out, return
+        if (x < 0) { return; }
+        if (x > 511) { return; }
+        if (y < 0) { return; }
+        if (y > 511) { return; }
+
+        let addr = SCREEN_BASE + Screen.rowOffset(y) + Screen.div16(x);
+        let word = Memory.peek(addr);
+        let bit  = Screen.mod16(x);
+        let m    = Screen.mask(bit);
+
+        if (color) {
+            let word = word | m;      // set bit
+        } else {
+            let word = word & (~m);   // clear bit
+        }
+
+        do Memory.poke(addr, word);
+        return;
     }
 
-    /** Draws a line from pixel (x1,y1) to pixel (x2,y2), using the current color. */
+    // Bresenham (integer) — written in very parser-friendly style
     function void drawLine(int x1, int y1, int x2, int y2) {
+        var int dx;
+        var int dy;
+        var int sx;
+        var int sy;
+        var int err;
+        var int e2;
+        var int cx;
+        var int cy;
+
+        let cx = x1;
+        let cy = y1;
+
+        let dx = Math.abs(x2 - x1);
+        let dy = 0 - Math.abs(y2 - y1);
+
+        if (x1 < x2) { let sx = 1; } else { let sx = 0 - 1; }
+        if (y1 < y2) { let sy = 1; } else { let sy = 0 - 1; }
+
+        let err = dx + dy;
+
+        // while (true) => while (~(0 = 1))
+        while (~(0 = 1)) {
+            do Screen.drawPixel(cx, cy);
+
+            // if ((cx==x2) & (cy==y2)) return;
+            if (cx = x2) {
+                if (cy = y2) {
+                    return;
+                }
+            }
+
+            let e2 = err + err;
+
+            // if (e2 >= dy)  <=>  if (~(e2 < dy))
+            if (~(e2 < dy)) {
+                let err = err + dy;
+                let cx  = cx + sx;
+            }
+
+            // if (e2 <= dx)  <=>  if (~(dx < e2))
+            if (~(dx < e2)) {
+                let err = err + dx;
+                let cy  = cy + sy;
+            }
+        }
+
+        return;
     }
 
-    /** Draws a filled rectangle whose top left corner is (x1, y1)
-     *  and bottom right corner is (x2,y2), using the current color. */
     function void drawRectangle(int x1, int y1, int x2, int y2) {
+        var int x;
+        var int y;
+        var int left;
+        var int right;
+        var int top;
+        var int bottom;
+
+        if (x1 < x2) { let left = x1; let right = x2; }
+        else { let left = x2; let right = x1; }
+
+        if (y1 < y2) { let top = y1; let bottom = y2; }
+        else { let top = y2; let bottom = y1; }
+
+        let y = top;
+
+        // while (y <= bottom) <=> while (~(bottom < y))
+        while (~(bottom < y)) {
+            let x = left;
+            while (~(right < x)) {   // x <= right
+                do Screen.drawPixel(x, y);
+                let x = x + 1;
+            }
+            let y = y + 1;
+        }
+
+        return;
     }
 
-    /** Draws a filled circle of radius r<=181 around (x,y), using the current color. */
     function void drawCircle(int x, int y, int r) {
+        // Midpoint circle + fill with drawLine
+        var int dx;
+        var int dy;
+        var int err;
+        var int tmp;
+
+        if (r < 0) { return; }
+
+        let dx = r;
+        let dy = 0;
+        let err = 1 - r;
+
+        // while (dx >= dy) <=> while (~(dx < dy))
+        while (~(dx < dy)) {
+
+            // spans (avoid x - dx etc by using 0 - dx)
+            do Screen.drawLine(x + (0 - dx), y + dy, x + dx, y + dy);
+            do Screen.drawLine(x + (0 - dx), y + (0 - dy), x + dx, y + (0 - dy));
+            do Screen.drawLine(x + (0 - dy), y + dx, x + dy, y + dx);
+            do Screen.drawLine(x + (0 - dy), y + (0 - dx), x + dy, y + (0 - dx));
+
+            let dy = dy + 1;
+
+            if (err < 0) {
+                // err = err + 2*dy + 1
+                let err = err + (dy + dy) + 1;
+            } else {
+                let dx = dx - 1;
+                // err = err + 2*dy - 2*dx + 1
+                let err = err + (dy + dy) + (0 - (dx + dx)) + 1;
+            }
+        }
+
+        return;
     }
 }
