@@ -10,13 +10,13 @@
  */
 class Memory {
 
-    // free list head (address of first free block)
+    // Head of the free-list (address of the first free block header).
     static int freeList;
 
-    // heap start address (conventionally 2048)
+    // Start of heap region (convention: 2048).
     static int heapStart;
 
-    /** internal: RAM[address] -> int */
+    /** Internal helper: returns RAM[address] (a 16-bit word). */
     function int read(int address) {
         var Array a;
         let a = address;     // treat raw address as Array base

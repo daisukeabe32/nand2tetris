@@ -1,5 +1,7 @@
 class Sys {
 
+    // Transfer control to the user program.
+    // Sys.init is the VM entry point and should not return.
     function void init() {
         do Memory.init();
         do Math.init();
@@ -17,6 +19,8 @@ class Sys {
         return;
     }
 
+    // Busy-wait loop. The inner loop constant is calibrated empirically
+    // to approximate milliseconds on the supplied VM Emulator.
     function void wait(int duration) {
         var int i, j;
         var int sink;
@@ -27,7 +31,7 @@ class Sys {
         while (i < duration) {
             let j = 0;
 
-            // ★ここを調整して「1msっぽさ」を合わせる
+            // toggle here to waste time
             while (j < 250) {
                 let sink = sink + j;
                 let j = j + 1;

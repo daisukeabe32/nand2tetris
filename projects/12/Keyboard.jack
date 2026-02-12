@@ -9,10 +9,8 @@ class Keyboard {
         return;
     } 
 
-    /**
-     * Returns the character of the currently pressed key on the keyboard;
-     * if no key is currently pressed, returns 0.
-     */
+    // Reads the memory-mapped keyboard register (KBD = 24576).
+    // Returns 0 if no key is pressed.
     function char keyPressed() {
         return Memory.peek(24576);   // KBD
     }
@@ -29,7 +27,8 @@ class Keyboard {
         // wait for release (debounce)
         while (~(Keyboard.keyPressed() = 0)) { }
 
-        // echo (printable only; but spec says echo the key, so printChar)
+        // Echo the character to the screen.
+        // Note: control keys (if any) will be passed to Output as-is.
         do Output.printChar(c);
         return c;
     }
@@ -41,7 +40,7 @@ class Keyboard {
 
         do Output.printString(message);
 
-        // allow up to 80 chars (good enough for tests)
+        // Allocate a buffer for the line. 80 is sufficient for the supplied tests.
         let s = String.new(80);
 
         while (true) {

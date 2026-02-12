@@ -4,12 +4,12 @@ class String {
     field int length;
     field int maxLength;
 
-    /** constructs a new empty string with a maximum length of maxLength
-     *  and initial length of 0. */
+    // Note: we allocate at least 1 cell to avoid Array.new(0) errors,
+    // but keep maxLength as requested by the caller.
     constructor String new(int maxLen) {
         var int cap;
 
-        // Array.new(0) が落ちるので、内部バッファだけ最低1確保する
+        // Array.new(0) is not allowed
         let cap = maxLen;
         if (cap < 1) {
             let cap = 1;
@@ -30,11 +30,13 @@ class String {
     }
 
     /** Returns the current length of this string. */
+    // No bounds checking (assumes 0 <= j < length).
     method int length() {
         return length;
     }
 
     /** Returns the character at the j-th location of this string. */
+    // No bounds checking (assumes 0 <= j < length).
     method char charAt(int j) {
         return data[j];
     }
@@ -64,6 +66,7 @@ class String {
 
     /** Returns the integer value of this string,
      *  until a non-digit character is detected. */
+     // Note: '*' and '/' are compiled into calls to Math.multiply / Math.divide.
     method int intValue() {
         var int i, value, digit, sign;
 
@@ -94,6 +97,7 @@ class String {
     }
 
     /** Sets this string to hold a representation of the given value. */
+    // Note: '*' and '/' are compiled into calls to Math.multiply / Math.divide.
     method void setInt(int val) {
         var int temp, digit;
         var int start, i, j;

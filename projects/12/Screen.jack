@@ -42,7 +42,7 @@ class Screen {
         return m;
     }
 
-    // y*32 by doubling 5 times (no *)
+    // Computes y*32 (since each screen row uses 32 16-bit words), using repeated doubling.
     function int rowOffset(int y) {
         var int acc;
         var int i;
@@ -99,7 +99,7 @@ class Screen {
         return;
     }
 
-    // Bresenham (integer) — written in very parser-friendly style
+    // Bresenham's line algorithm (integer arithmetic), written in a Jack-friendly style.
     function void drawLine(int x1, int y1, int x2, int y2) {
         var int dx;
         var int dy;

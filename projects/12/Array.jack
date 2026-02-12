@@ -12,7 +12,7 @@ class Array {
 
     /** Constructs a new Array of the given size. */
     function Array new(int size) {
-        // allocate 'size' words on the heap and return base address
+        // Allocates 'size' 16-bit words on the heap and returns the base address.
         return Memory.alloc(size);
     }
 

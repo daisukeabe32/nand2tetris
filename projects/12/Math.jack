@@ -1,12 +1,12 @@
 class Math {
-    static int n;             // use 15 (0..14)
-    static Array powersOfTwo; // 2^0..2^14 only
+    static int n;             // number of usable bits (15: 0..14), avoiding 2^15 overflow
+    static Array powersOfTwo; // powersOfTwo[i] = 2^i for i=0..14
 
     function void init() {
         var int i;
         var int p;
 
-        let n = 15;                    // ★ 16 → 15 にする
+        let n = 15;                   
         let powersOfTwo = Array.new(n); // [0..14]
 
         let i = 0;
@@ -38,7 +38,7 @@ class Math {
         let term = a;
 
         let i = 0;
-        while (i < n) {               // ★ 0..14 だけ見る
+        while (i < n) {               // iterate over bits 0..14 only
             let mask = powersOfTwo[i];
             if (~((b & mask) = 0)) {
                 let res = res + term;
@@ -84,11 +84,13 @@ class Math {
             while (j < i) {
                 let denom = denom + denom;
 
-                // ★ overflow guard: if denom became negative, it overflowed
+                // Overflow guard: denom is repeatedly doubled. If it becomes negative,
+                // the sign bit (bit 15) flipped, meaning 16-bit overflow occurred.
+                // In that case, force denom > r so this bit is not selected.
                 if (denom < 0) {
                     let denom = r + 1;   // force denom > r so we skip this bit
-                    ly
-                }let j = i;           // end the inner loop ear
+                    let j = i;  
+                }       
 
                 let j = j + 1;
             }
